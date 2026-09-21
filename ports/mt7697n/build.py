@@ -148,6 +148,9 @@ def main():
         sources += [HERE / "dependency_probe.cpp", mqtt / "PubSubClient.cpp",
                     json_parser / "JsonParser.cpp", json_parser / "jsmn.cpp"]
     if options.platform:
+        bear = HERE.parents[1] / "lib/lib_ssl/bearssl-esp8266/src"
+        flags += ["-I" + bear.as_posix()]
+        sources += [bear / p for p in ("hash/sha1.c", "codec/enc32be.c", "codec/dec32be.c")]
         sources = [p for p in sources if p.name != "variant_delay.c"]
         sources += sorted((HERE / "platform").glob("*.cpp"))
         sources += [HERE / "core_layout.cpp"]
@@ -222,6 +225,10 @@ def main():
     ]
     if options.platform and not options.application:
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
+    if options.platform:
+        link += ["-Wl,--undefined=mt7697_ota_link_check"]
+    if options.application:
+        link += ["-Wl,--undefined=mt7697_image_identity"]
     command("arm-none-eabi-gcc", link)
     undefined = command("arm-none-eabi-nm", ["-u", elf.as_posix()])
     if undefined.strip():
@@ -264,7 +271,7 @@ def main():
             "serial_commands": "implemented; hardware unverified",
             "wifi_mqtt_settings": "implemented; hardware unverified",
             "gpio_pwm": "disabled; dedicated lamp integration pending",
-            "ota": "unavailable; native package and activation implementation pending",
+            "ota": "package/staging backend implemented; command and HTTP transport pending",
             "retained_reboot_state": "not implemented",
         }
         metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()

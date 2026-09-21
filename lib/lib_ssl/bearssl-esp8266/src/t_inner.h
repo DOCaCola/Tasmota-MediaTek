@@ -27,7 +27,11 @@
 
 #include <string.h>
 #include <limits.h>
+#ifdef _WIN32
+#include <malloc.h>
+#else
 #include <alloca.h>
+#endif
 
 #include "pgmspace_bearssl.h"
 

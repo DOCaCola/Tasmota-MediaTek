@@ -30,6 +30,19 @@ if __name__ == "__main__":
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
+    subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
+    bear = PORT.parents[1] / "lib/lib_ssl/bearssl-esp8266/src"
+    sha_objects = []
+    for source in ("hash/sha1.c", "codec/enc32be.c", "codec/dec32be.c"):
+        obj = output / (Path(source).name + ".o")
+        subprocess.run([options.cxx, "-x", "c", "-std=c99", "-I" + str(bear),
+                        "-c", str(bear / source), "-o", str(obj)], check=True)
+        sha_objects.append(str(obj))
+    executable = output / "ota.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(PORT), "-I" + str(bear), str(HERE / "ota_test.cpp"),
+                    str(PORT / "platform/ota.cpp"), *sha_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable), str(output / "ota-fixture.bin")], check=True)
     executable = output / "scan.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "network_fakes"), str(HERE / "scan_test.cpp"),

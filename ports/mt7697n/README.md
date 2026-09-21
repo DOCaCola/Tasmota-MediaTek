@@ -159,8 +159,9 @@ Native system/network reporting, asynchronous scan, PHY commands, banked
 settings and main-task NTP/RTC services are linked. Generic GPIO/PWM controls
 and template edits explicitly report unavailable; pin validation prevents
 routing MCU numbers through the LinkIt board's Arduino pin table. Upgrade
-reports unavailable until native OTA staging, validation, activation and
-package generation are implemented. No ESP updater is linked as a substitute.
+reports unavailable until native HTTP download and command integration are
+implemented. Package generation and the staging/activation backend now exist.
+No ESP updater is linked as a substitute.
 
 The build includes ARM Ext-printf, JSON escaping, and native wall-clock and
 delay services. Ext-printf's ARM cursor handling follows AAPCS32 and preserves
@@ -192,3 +193,27 @@ failed builds remove stale application outputs.
 
 The native board template leaves all lamp outputs unassigned. No image from
 this stage is a validated lamp installation image.
+
+## OTA package and staging backend
+
+The native backend validates one uncompressed application-only MMM package,
+checks the installed SDK bootloader/radio fingerprints before writes, stages
+within the dedicated FOTA region and verifies the complete payload by readback.
+Activation is separate and never reboots. The final 4 KiB staging sector is
+reserved for bootloader markers. SHA-1 checksums are not signatures.
+
+Build the application, install `tests/requirements-arm.txt`, then:
+
+```text
+python package_ota.py build/tasmota-gcc13-sdk-runtime/tasmota.bin build/tasmota-gcc13-sdk-runtime/tasmota-ota.bin
+python tests/package_elf_test.py
+```
+
+The builder requires the matching `.elf` beside the input BIN (or `--elf`),
+verifies its SDK entry address and application identity symbol, and compares
+the complete load image to the BIN. It never uploads anything.
+
+Twelve C++ host suites, seven Python unit tests and five additional ELF tests
+pass. HTTP transfer and the `Upgrade` command integration remain outstanding,
+as does device validation. Format provenance, failure behavior and limitations:
+`../../../../RnD/native-ota-staging.md`.
