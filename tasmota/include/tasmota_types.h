@@ -461,7 +461,7 @@ typedef struct {
   uint32_t last_usage_kWhtotal;
 } EnergyUsage;
 
-typedef struct {
+typedef struct TuyaFnidDpidMap {
   uint8_t fnid = 0;
   uint8_t dpid = 0;
 } TuyaFnidDpidMap;
@@ -708,6 +708,22 @@ typedef struct {
                                            // 496
 #endif  // ESP32 Mapping
 #endif  // ESP32
+#ifdef TASMOTA_PLATFORM_MT7697N
+  // Native YLXD01YL mapping occupies the existing 0x3AC..0x495 platform block.
+  // Keep subsequent settings offsets stable without claiming ESP compatibility.
+  myio          my_gp;                     // 3AC: raw GPIO0..39, 80 bytes
+  mytmplt       user_template;             // 3FC: warm/cold/night plus flags, 8 bytes
+  uint8_t       reserved_mt7697_404[77];    // 404
+  char          serial_delimiter;          // 451
+  uint8_t       seriallog_level;           // 452
+  uint8_t       sleep;                     // 453
+  uint16_t      domoticz_switch_idx[MAX_DOMOTICZ_IDX];      // 454
+  uint16_t      domoticz_sensor_idx[MAX_DOMOTICZ_SNS_IDX];  // 45C
+  uint8_t       module;                    // 474
+  uint8_t       ws_color[4][3];            // 475
+  uint8_t       ws_width[3];               // 481
+  uint8_t       reserved_mt7697_484[18];   // 484
+#endif
   // --------------------------------------------------------------
   // End of CPU specific Mapping
   // --------------------------------------------------------------

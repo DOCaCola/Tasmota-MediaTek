@@ -50,6 +50,14 @@ const uint8_t MAX_INTERLOCKS = 16;          // Max number of interlock groups (u
 const uint8_t MAX_SWITCHES = 32;            // Max number of switches selectable on GPIO
 const uint8_t MAX_KEYS = 32;                // Max number of keys or buttons selectable on GPIO
 #endif  // ESP32
+#ifdef TASMOTA_PLATFORM_MT7697N
+const uint8_t MAX_RELAYS = 8;
+const uint8_t MAX_INTERLOCKS = 16;
+const uint8_t MAX_SWITCHES = 8;
+const uint8_t MAX_KEYS = 8;
+const uint8_t MAX_ADCS = 0;                 // No native ADC driver enabled.
+const uint8_t MAX_SWITCHES_TXT = 8;
+#endif
 const uint8_t MAX_RELAYS_SET = 32;          // Max number of relays
 const uint8_t MAX_KEYS_SET = 32;            // Max number of keys
 

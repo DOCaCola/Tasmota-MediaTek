@@ -21,6 +21,13 @@
  * RTC memory
 \*********************************************************************************************/
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#include <platform/settings.h>
+// Only a successful load or an explicitly empty store enables persistence.
+// I/O/corruption errors must not cause defaults to overwrite the captured data.
+bool mt7697_settings_writable = false;
+#endif
+
 const uint16_t RTC_MEM_VALID = 0xA55A;
 
 uint32_t rtc_settings_crc = 0;
@@ -187,12 +194,14 @@ bool RtcRebootValid(void) {
  * 0x000FFFFF  0x001FFFFF  0x003FFFFF
 \*********************************************************************************************/
 
+#if defined(ESP8266) || defined(ESP32)
 extern "C" {
 #include "spi_flash.h"
 #ifdef ESP32
 #include "spi_flash_mmap.h"
 #endif  // ESP32
 }
+#endif
 
 #ifdef ESP8266
 
@@ -221,16 +230,22 @@ uint32_t SETTINGS_LOCATION = EEPROM_LOCATION;
 
 const uint8_t CFG_ROTATES = 7;      // Number of flash sectors used (handles uploads)
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+uint32_t settings_location = 0;  // Logical loaded/saved marker, not a flash sector.
+#else
 uint32_t settings_location = EEPROM_LOCATION;
+#endif
 uint32_t settings_crc32 = 0;
 uint32_t settings_size = 0;
 uint8_t *settings_buffer = nullptr;
 uint8_t config_xor_on_set = CONFIG_FILE_XOR;
 
 void SettingsInit(void) {
+#ifndef TASMOTA_PLATFORM_MT7697N
   if (SETTINGS_LOCATION > 0xFA) {
     SETTINGS_LOCATION = 0xFD;       // Skip empty partition part and keep in first 1M
   }
+#endif
 }
 
 /*********************************************************************************************\
@@ -719,7 +734,11 @@ void UpdateBackwardCompatibility(void) {
 }
 
 uint32_t GetSettingsAddress(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  return 0;  // NVDM items have no fixed application-visible flash address.
+#else
   return settings_location * SPI_FLASH_SEC_SIZE;
+#endif
 }
 
 void SettingsSave(uint8_t rotate) {
@@ -732,6 +751,13 @@ void SettingsSave(uint8_t rotate) {
  * stop_flash_rotate 1 = Allow only eeprom flash slot use (SetOption12 1)
  */
 #ifndef FIRMWARE_MINIMAL
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (!mt7697_settings_writable) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("CFG: NVDM storage unavailable; settings not saved"));
+    RtcSettingsSave();
+    return;
+  }
+#endif
   XsnsXdrvCall(FUNC_SAVE_SETTINGS);
   UpdateBackwardCompatibility();
   if ((GetSettingsCrc32() != settings_crc32) || rotate) {
@@ -739,6 +765,7 @@ void SettingsSave(uint8_t rotate) {
       TasmotaGlobal.stop_flash_rotate = 1;
     }
 
+#ifndef TASMOTA_PLATFORM_MT7697N
     if (TasmotaGlobal.stop_flash_rotate || (2 == rotate)) {  // Use eeprom flash slot and erase next flash slots if stop_flash_rotate is off (default)
       settings_location = EEPROM_LOCATION;
     } else {                                           // Rotate flash slots
@@ -752,6 +779,7 @@ void SettingsSave(uint8_t rotate) {
       }
     }
 
+#endif
     Settings->save_flag++;
     if (UtcTime() > START_VALID_TIME) {
       Settings->cfg_timestamp = UtcTime();
@@ -785,6 +813,19 @@ void SettingsSave(uint8_t rotate) {
     AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_CONFIG "Saved, " D_COUNT " %d, " D_BYTES " %d"), Settings->save_flag, sizeof(TSettings));
 #endif  // ESP32
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+    const auto result = mt7697::sdk_save_settings(Settings, sizeof(TSettings));
+    if (result != mt7697::StorageResult::Ok) {
+      AddLog(LOG_LEVEL_ERROR, PSTR("CFG: NVDM save failed (%u)"), static_cast<unsigned>(result));
+      RtcSettingsSave();
+#ifdef USE_COUNTER
+      CounterInterruptDisable(false);
+#endif
+      return;  // Keep settings_crc32 unchanged so the next save retries.
+    }
+    settings_location = 1;
+    AddLog(LOG_LEVEL_DEBUG, PSTR("CFG: Saved to NVDM, Count %lu"), Settings->save_flag);
+#endif
     settings_crc32 = Settings->cfg_crc32;
   }
 #endif  // FIRMWARE_MINIMAL
@@ -794,6 +835,24 @@ void SettingsSave(uint8_t rotate) {
 #endif
 }
 void SettingsLoad(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  settings_location = 0;
+  const auto result = mt7697::sdk_load_settings(Settings, sizeof(TSettings));
+  mt7697_settings_writable = result == mt7697::StorageResult::Ok ||
+                            result == mt7697::StorageResult::Missing;
+  if (result == mt7697::StorageResult::Ok) {
+    if (Settings->cfg_size == sizeof(TSettings) && Settings->cfg_crc32 == GetSettingsCrc32()) {
+      settings_location = 1;
+      AddLog(LOG_LEVEL_INFO, PSTR("CFG: Loaded from NVDM, Count %lu"), Settings->save_flag);
+    } else {
+      mt7697_settings_writable = false;
+      AddLog(LOG_LEVEL_ERROR, PSTR("CFG: Invalid NVDM settings; persistent writes disabled"));
+    }
+  } else if (result != mt7697::StorageResult::Missing) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("CFG: NVDM load failed (%u); persistent writes disabled"),
+           static_cast<unsigned>(result));
+  }
+#endif
 #ifdef ESP8266
   // Load configuration from optional file and flash (eeprom and 7 additonal slots) if first valid load does not stop_flash_rotate
   // Activated with version 8.4.0.2 - Fails to read any config before version 6.6.0.11

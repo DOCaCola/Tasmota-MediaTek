@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 HERE = Path(__file__).resolve().parent
 WORK = HERE.parents[2]
@@ -34,10 +35,14 @@ def main():
     parser.add_argument("--network", action="store_true", help="Link the Wi-Fi scan probe")
     parser.add_argument("--dependencies", action="store_true",
                         help="Also link Tasmota MQTT and SDK runtime checks (requires gcc13-sdk-runtime)")
+    parser.add_argument("--platform", action="store_true",
+                        help="Link native network/settings services; no flash writes are invoked")
     parser.add_argument("--layout", choices=["sdk", "lamp"], default="sdk")
     parser.add_argument("--compiler", choices=["legacy", "gcc10", "gcc13", "gcc13-sdk-runtime"],
                         default="legacy", help="Experimental compiler/runtime selection.")
     options = parser.parse_args()
+    if options.platform:
+        options.dependencies = True
     if options.dependencies:
         if options.compiler != "gcc13-sdk-runtime":
             parser.error("--dependencies requires --compiler gcc13-sdk-runtime")
@@ -50,6 +55,8 @@ def main():
         BUILD = HERE / "build/lamp-probe"
     if options.dependencies:
         BUILD = HERE / "build/dependency-probe"
+    if options.platform:
+        BUILD = HERE / "build/platform-probe"
     if options.compiler in ("gcc13", "gcc13-sdk-runtime"):
         TOOLS = WORK / "vendor/modern-toolchain/xpack-arm-none-eabi-gcc-13.3.1-1.1/bin"
         BUILD = BUILD.with_name(BUILD.name + "-" + options.compiler)
@@ -111,7 +118,7 @@ def main():
         p for directory in (core, variant) for p in directory.iterdir()
         if p.suffix in (".c", ".cpp", ".S")
     ) + [HERE / "smoke.cpp", HERE / "ylxd01yl_pwm.cpp"]
-    if options.layout == "lamp":
+    if options.layout == "lamp" or options.platform:
         sources = [p for p in sources if p.name != "adapter_layer.c"]
         sources.append(HERE / "board_init.cpp")
     if options.network:
@@ -125,6 +132,13 @@ def main():
                   "-I" + json_parser.as_posix()]
         sources += [HERE / "dependency_probe.cpp", mqtt / "PubSubClient.cpp",
                     json_parser / "JsonParser.cpp", json_parser / "jsmn.cpp"]
+    if options.platform:
+        sources += sorted((HERE / "platform").glob("*.cpp"))
+        sources += [HERE / "core_layout.cpp"]
+        flags += ["-DTASMOTA_PLATFORM_MT7697N", "-I" + HERE.as_posix(),
+                  "-I" + (HERE.parents[1] / "tasmota").as_posix()]
+        # Keep the persistence entry points in the link without calling them.
+        flags += ["-DMT7697_PLATFORM_PROBE"]
     objects = []
     for i, source in enumerate(sources):
         obj = BUILD / f"{i:02d}-{source.name}.o"
@@ -135,6 +149,15 @@ def main():
                 flags + language + (cpp_headers if cpp else []) + c_headers
                 + ["-c", source.as_posix(), "-o", obj.as_posix()])
         objects.append(obj.as_posix())
+    if options.platform:
+        # Verify the actual core hooks under the ARM compiler as well as host
+        # execution tests. Fixtures supply the rest of the application context.
+        subprocess.run([sys.executable, str(HERE / "tests/run.py"), "--generate-only"], check=True)
+        for test in ("core_settings_test.cpp", "core_network_test.cpp"):
+            command("arm-none-eabi-g++", flags + ["-std=gnu++17", "-fno-exceptions", "-fno-rtti"]
+                    + cpp_headers + c_headers
+                    + ["-I" + (HERE / "build/host-tests").as_posix(), "-fsyntax-only",
+                       (HERE / "tests" / test).as_posix()])
     libraries = [
         (system / "libs" / value).as_posix()
         for key, value in properties.items() if key.startswith("build.lib_")
@@ -160,6 +183,8 @@ def main():
         "-Wl,--start-group", *objects, *libraries,
         *runtime_libraries, "-Wl,--end-group",
     ]
+    if options.platform:
+        link += ["-Wl,--undefined=mt7697_platform_link_check"]
     command("arm-none-eabi-gcc", link)
     undefined = command("arm-none-eabi-nm", ["-u", elf.as_posix()])
     if undefined.strip():
@@ -177,6 +202,7 @@ def main():
         "language": "c++11" if options.compiler == "legacy" else "gnu++17",
         "hardware_validated": False,
         "dependencies_probe": options.dependencies,
+        "platform_probe": options.platform,
         "binary_bytes": binary.stat().st_size,
         "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "source_files": len(sources),

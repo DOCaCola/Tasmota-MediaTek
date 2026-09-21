@@ -124,6 +124,27 @@ The acceptance sequence and OTA findings are in
    and a minimal remote-update route. OTA is part of the first functional
    milestone; richer web features and TLS can follow as required.
 
-No Tasmota Wi-Fi/settings/OTA adapter has been implemented yet. The source
-checkout and working hardware backend are the starting point, not a finished
-Tasmota build.
+Native network and settings services are now implemented in `platform/`.
+They provide a polled connection lifecycle and verified, banked NVDM storage
+for the 4096-byte settings image. The native core save/load and station
+lifecycle hooks now call these services. Full application and OTA integration
+remain outstanding.
+
+```text
+python tests/run.py --cxx C:/msys64/ucrt64/bin/g++.exe
+python build.py --platform --compiler gcc13-sdk-runtime
+```
+
+The platform probe links all service entry points without calling the
+persistence operations. It uses the lamp board initializer with the SDK flash
+layout. No probe is a complete Tasmota build or an approved lamp image.
+First Wi-Fi startup still includes synchronous SDK initialization; only the
+association/retry state machine is polled. NVDM banking handles item-level
+write interruption in host tests; device power-loss behavior is unverified.
+Details and evidence: `../../../../RnD/native-platform-services.md`.
+
+`--platform` also compiles the real native `TSettings` layout with offset/size
+assertions and syntax-checks the core-hook fixtures using the ARM compiler.
+The host test runner executes five suites, including actual core save/load
+functions and native station hooks. This does not compile the full application.
+Current integration: `../../../../RnD/native-core-integration.md`.

@@ -19,6 +19,7 @@
 
 #ifndef _TASMOTA_TEMPLATE_H_
 #define _TASMOTA_TEMPLATE_H_
+#include "tasmota_gpio_encoding.h"
 
 // User selectable GPIO functionality
 // ATTENTION: Only add at the end of this list just before GPIO_SENSOR_END
@@ -1574,6 +1575,14 @@ const char PINS_WEMOS[] PROGMEM = "IOTXIORXIOIOFLFLFLFLFLFLIOIOIOIOIOIOIOIOIOIOI
 /********************************************************************************************\
  * !!! Changes in below type sizes impact Settings layout - Add fill bytes in Settings !!!
 \********************************************************************************************/
+
+#ifdef TASMOTA_PLATFORM_MT7697N
+// Fixed YLXD01YL board: retain raw GPIO indexing for 0..39, expose only the
+// three traced lamp outputs in its template. This is not a generic MT7697 HDK.
+#define MAX_GPIO_PIN       40
+#define MAX_USER_PINS      3
+const uint8_t MT7697_TEMPLATE_TO_GPIO[MAX_USER_PINS] = {31, 32, 30};
+#endif
 
 typedef struct MYIO {
   uint16_t      io[MAX_GPIO_PIN];

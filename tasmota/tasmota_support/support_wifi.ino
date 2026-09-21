@@ -29,6 +29,7 @@
 #ifndef WIFI_RSSI_THRESHOLD
 #define WIFI_RSSI_THRESHOLD     10         // Difference in dB between current network and scanned network
 #endif
+#ifndef TASMOTA_PLATFORM_MT7697N
 #ifndef WIFI_RESCAN_MINUTES
 #define WIFI_RESCAN_MINUTES     44         // Number of minutes between wifi network rescan
 #endif
@@ -2236,3 +2237,4 @@ void WifiEvents(arduino_event_t *event) {
   WiFiHelper::scrubDNS();    // internal calls to reconnect can zero the DNS servers, restore the previous values
 }
 #endif // ESP32
+#endif // !TASMOTA_PLATFORM_MT7697N
