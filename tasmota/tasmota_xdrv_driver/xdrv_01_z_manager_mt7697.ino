@@ -67,23 +67,15 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio init, reset %s, heap %u, stack %u"),
     mt7697::reset_reason_text(),mt7697::free_heap(),mt7697::stack_low_water_bytes());
   const bool first_init=!wifi_ready();
-  if (first_init && !mt7697::prepare_setup_ap(name,passphrase?passphrase:"",channel)) return false;
+  if (!mt7697::prepare_setup_ap(name,passphrase?passphrase:"",channel)) return false;
   init_global_connsys();
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio ready; configuring setup AP"));
   const auto configure=[&]() {
     // Mode changes start the AP immediately, so the radio must be running.
     // Idle setup must not restart the saved station connection on reload.
     // AP+STA is enabled only for an explicit credential trial.
-    if (wifi_config_set_opmode(WIFI_MODE_AP_ONLY)<0 ||
-        wifi_config_set_ssid(WIFI_PORT_AP,reinterpret_cast<uint8_t*>(const_cast<char*>(name)),strlen(name))<0 ||
-        wifi_config_set_channel(WIFI_PORT_AP,channel)<0) return false;
-    const bool secured=passphrase && passphrase[0];
-    if (wifi_config_set_security_mode(WIFI_PORT_AP,
-        secured?WIFI_AUTH_MODE_WPA2_PSK:WIFI_AUTH_MODE_OPEN,
-        secured?WIFI_ENCRYPT_TYPE_AES_ENABLED:WIFI_ENCRYPT_TYPE_WEP_DISABLED)<0) return false;
-    if (secured && wifi_config_set_wpa_psk_key(WIFI_PORT_AP,
-        reinterpret_cast<uint8_t*>(const_cast<char*>(passphrase)),strlen(passphrase))<0) return false;
-    return wifi_config_reload_setting()>=0;
+    return wifi_config_set_opmode(WIFI_MODE_AP_ONLY)>=0 &&
+        mt7697::apply_setup_ap() && wifi_config_reload_setting()>=0;
   };
   if (!first_init && !configure()) { NativeWifiAPCleanup(); return false; }
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: AP-only configured; starting IP services"));

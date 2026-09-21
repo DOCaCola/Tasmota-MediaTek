@@ -25,6 +25,13 @@ bool prepare_setup_ap(const char* ssid,const char* password,unsigned channel) {
   startup_ap_pending=true;
   return true;
 }
+bool apply_setup_ap() {
+  return wifi_config_set_ssid(WIFI_PORT_AP,startup_ap.ssid,startup_ap.ssid_length)>=0 &&
+      wifi_config_set_channel(WIFI_PORT_AP,startup_ap.channel)>=0 &&
+      wifi_config_set_security_mode(WIFI_PORT_AP,startup_ap.auth_mode,startup_ap.encrypt_type)>=0 &&
+      (!startup_ap.password_length ||
+       wifi_config_set_wpa_psk_key(WIFI_PORT_AP,startup_ap.password,startup_ap.password_length)>=0);
+}
 }
 extern "C" {
 void __real_wifi_init(wifi_config_t* config, wifi_config_ext_t* extended);
@@ -45,7 +52,6 @@ void __wrap_wifi_init(wifi_config_t* config, wifi_config_ext_t* extended) {
     native.ap_hidden_ssid_enable_present=1;
     native.ap_hidden_ssid_enable=0;
     startup_ap_pending=false;
-    memset(&startup_ap,0,sizeof(startup_ap));
   }
   __real_wifi_init(config, &native);
 }

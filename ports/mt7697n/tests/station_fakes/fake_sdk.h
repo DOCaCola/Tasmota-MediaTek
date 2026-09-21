@@ -15,7 +15,8 @@ struct ip_addr_t { uint32_t addr; };
 extern const ip_addr_t zero_ip;
 #define IP4_ADDR_ANY (&zero_ip)
 #define ip4_addr_isany_val(ip) ((ip).addr == 0)
-struct netif { ip_addr_t ip_addr; bool link, up, lease; };
+struct dhcp { unsigned state, tries; };
+struct netif { ip_addr_t ip_addr; bool link, up, lease; struct dhcp* dhcp; };
 typedef int sys_sem_t;
 void init_global_connsys();
 bool wifi_ready();

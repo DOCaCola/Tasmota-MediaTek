@@ -8,3 +8,8 @@ typedef struct {
   uint8_t country_code[4];
   unsigned ap_hidden_ssid_enable_present,ap_hidden_ssid_enable;
 } wifi_config_ext_t;
+#define WIFI_PORT_AP 1
+int wifi_config_set_ssid(uint8_t,uint8_t*,uint8_t);
+int wifi_config_set_channel(uint8_t,uint8_t);
+int wifi_config_set_security_mode(uint8_t,unsigned,unsigned);
+int wifi_config_set_wpa_psk_key(uint8_t,uint8_t*,uint8_t);

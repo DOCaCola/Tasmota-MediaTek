@@ -13,6 +13,9 @@ static uint8_t radio_mode=WIFI_MODE_STA_ONLY;
 static bool mode_query_error=false;
 static std::string sequence;
 static int operation(char code) { sequence+=code; return ++calls==fail_call ? -1 : 0; }
+namespace mt7697 { bool apply_setup_ap() {
+  assert(radio_mode==WIFI_MODE_REPEATER);return operation('P')>=0;
+} }
 extern "C" {
 const ip_addr_t zero_ip{};
 void init_global_connsys() { initialized=true; }
@@ -81,11 +84,24 @@ int main() {
   radio_mode=WIFI_MODE_AP_ONLY;sequence.clear();
   assert(station_stop() && sequence.empty()); // no unsupported disconnect in AP-only
   assert(station_start("trial","password"));
-  assert(radio_mode==WIFI_MODE_REPEATER && sequence=="MDSAKR");
+  assert(radio_mode==WIFI_MODE_REPEATER && sequence=="MPDSAKR");
   radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=1;
   assert(!station_start("trial","password") && radio_mode==WIFI_MODE_AP_ONLY);
   fail_call=0;mode_query_error=true;
   assert(!station_start("trial","password") && !station_stop());
   mode_query_error=false;
+  // SDK link-up is not proof that this owner has started a DHCP client.
+  assert(station_start("router","password"));
+  iface.link=true;link_status=1;
+  const int before=dhcp_calls;
+  assert(!station_online() && dhcp_calls==before+1);
+  assert(!station_online() && dhcp_calls==before+1);
+  link_status=0;assert(!station_online());
+  iface.link=true;link_status=1;
+  assert(!station_online() && dhcp_calls==before+2);
+  // Failed AP restoration must never reload a default-named hotspot.
+  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=2;sequence.clear();
+  assert(!station_start("trial","password") && sequence=="MP");
+  fail_call=0;
   puts("SDK station: thread ownership, fresh leases, WPA2/AES, failure paths passed");
 }
