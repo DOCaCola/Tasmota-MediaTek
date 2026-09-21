@@ -16,7 +16,9 @@ static std::string sequence;
 static int operation(char code) { sequence+=code; return ++calls==fail_call ? -1 : 0; }
 namespace mt7697 { bool apply_setup_ap() {
   assert(radio_mode==WIFI_MODE_REPEATER);return operation('P')>=0;
-} }
+}
+void report_network_rx() {}
+}
 extern "C" {
 const ip_addr_t zero_ip{};
 void init_global_connsys() { initialized=true; }
@@ -25,6 +27,9 @@ int wifi_config_set_ip_mode(uint8_t mode) {
   assert(mode==STA_IP_MODE_DHCP);
   int result=operation('I');if(result==0)driver_ip_mode=mode;return result;
 }
+int wifi_config_get_bssid(uint8_t* mac) {memset(mac,0,6);return 0;}
+int wifi_config_get_channel(uint8_t,uint8_t* channel) {*channel=1;return 0;}
+int wifi_config_get_rx_filter(uint32_t* filter) {*filter=0;return 0;}
 int wifi_connection_inform_ip_ready() {
   assert(!tcpip && driver_ip_mode==STA_IP_MODE_DHCP);
   assert(iface.lease && iface.ip_addr.addr);

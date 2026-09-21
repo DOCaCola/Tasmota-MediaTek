@@ -95,6 +95,7 @@ if __name__ == "__main__":
     # only SDK calls are replaced to exercise error paths without hardware.
     # This runs after the Arduino C objects have been generated below.
     cases = {
+        "rx-trace": [HERE / "rx_trace_test.cpp"],
         "wifi-trial": [HERE / "wifi_trial_test.cpp"],
         "ntp-service": [HERE / "ntp_service_test.cpp"],
         "ntp": [HERE / "ntp_test.cpp"],

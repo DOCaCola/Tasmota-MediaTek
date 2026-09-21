@@ -228,6 +228,7 @@ def main():
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
     if options.platform:
         link += ["-Wl,--wrap=wifi_init"]
+        link += ["-Wl,--wrap=tcpip_input"]
         link += ["-Wl,--undefined=mt7697_ota_link_check"]
     if options.application:
         link += ["-Wl,--undefined=mt7697_image_identity"]

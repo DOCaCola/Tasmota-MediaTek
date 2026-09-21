@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sdk_network.h"
 #include "wifi_startup.h"
+#include "rx_trace.h"
 #include <variant.h>
 #include <string.h>
 #include <stdio.h>
@@ -69,6 +70,19 @@ bool interface_request(bool link, bool reset, bool* online = nullptr) {
     printf("NET: station link=%u DHCP state=%u tries=%u lease=%u\n",
         unsigned(link),request.dhcp_state,request.dhcp_tries,unsigned(request.online));
     last_state=request.dhcp_state;last_tries=request.dhcp_tries;
+    report_network_rx();
+    if (link) {
+      uint8_t bssid[6],channel;
+      uint32_t filter;
+      const int br=wifi_config_get_bssid(bssid);
+      const int cr=wifi_config_get_channel(WIFI_PORT_STA,&channel);
+      const int fr=wifi_config_get_rx_filter(&filter);
+      if (br>=0 && cr>=0 && fr>=0)
+        printf("NET: BSSID=%02X:%02X:%02X:%02X:%02X:%02X channel=%u RX filter=%08lX\n",
+            bssid[0],bssid[1],bssid[2],bssid[3],bssid[4],bssid[5],channel,
+            static_cast<unsigned long>(filter));
+      else printf("NET: radio diagnostic errors bssid=%d channel=%d filter=%d\n",br,cr,fr);
+    }
   }
   if (online) *online = request.online;
   return request.ok;
