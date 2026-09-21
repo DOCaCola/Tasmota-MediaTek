@@ -271,7 +271,7 @@ def main():
             "serial_commands": "implemented; hardware unverified",
             "wifi_mqtt_settings": "implemented; hardware unverified",
             "gpio_pwm": "disabled; dedicated lamp integration pending",
-            "ota": "package/staging backend implemented; command and HTTP transport pending",
+            "ota": "HTTP IPv4 download, verified staging and Upgrade command implemented; hardware unverified",
             "retained_reboot_state": "not implemented",
         }
         metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()

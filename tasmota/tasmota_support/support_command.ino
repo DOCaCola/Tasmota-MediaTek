@@ -1356,7 +1356,7 @@ void CmndSleep(void)
 
 void CmndUpgrade(void) {
 #ifdef TASMOTA_PLATFORM_MT7697N
-  ResponseCmndChar(PSTR("Native OTA is not available in this build"));
+  NativeOtaCommand();
 #else
   // Check if the payload is numerically 1, and had no trailing chars.
   //   e.g. "1foo" or "1.2.3" could fool us.

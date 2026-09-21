@@ -3,7 +3,7 @@
 This directory starts a native platform port on Tasmota commit
 `8a7e815f6de5ad3822e9f28dd06f72d442e90c6c`, branch `mt7697n-ylxd01yl`.
 **The full Tasmota development application now compiles and links.** It has
-not run on the lamp. Native OTA and GPIO/PWM controls are unavailable in this
+not run on the lamp. Native HTTP OTA is implemented; GPIO/PWM controls are unavailable in this
 bring-up build; the Wi-Fi/settings/MQTT milestone is not yet demonstrated.
 The separate probe targets remain SDK integration checks. No ESP8266/ESP32 macros are used to impersonate another MCU.
 
@@ -159,8 +159,7 @@ Native system/network reporting, asynchronous scan, PHY commands, banked
 settings and main-task NTP/RTC services are linked. Generic GPIO/PWM controls
 and template edits explicitly report unavailable; pin validation prevents
 routing MCU numbers through the LinkIt board's Arduino pin table. Upgrade
-reports unavailable until native HTTP download and command integration are
-implemented. Package generation and the staging/activation backend now exist.
+uses the native HTTP downloader, package verifier and staging/activation backend.
 No ESP updater is linked as a substitute.
 
 The build includes ARM Ext-printf, JSON escaping, and native wall-clock and
@@ -213,7 +212,26 @@ The builder requires the matching `.elf` beside the input BIN (or `--elf`),
 verifies its SDK entry address and application identity symbol, and compares
 the complete load image to the BIN. It never uploads anything.
 
-Twelve C++ host suites, seven Python unit tests and five additional ELF tests
-pass. HTTP transfer and the `Upgrade` command integration remain outstanding,
-as does device validation. Format provenance, failure behavior and limitations:
+Fourteen C++ host suites, seven Python unit tests and five additional ELF tests
+pass. HTTP transfer and the `Upgrade` command are integrated; device validation
+remains outstanding. Format provenance, failure behavior and limitations:
 `../../../../RnD/native-ota-staging.md`.
+
+Set `OtaUrl http://10.9.8.2:8000/tasmota-ota.bin` to a server you control, then
+send `Upgrade 1` over serial or MQTT. Replace the example IP/port with your
+server. Serve the generated MMM package, not the raw application BIN.
+The downloader supports numeric IPv4 HTTP URLs and a `200` response with one
+Content-Length. HTTPS, hostnames, redirects, compression and chunked transfer
+are explicitly unsupported. There is no signature/authentication in this path;
+use a trusted development network and server.
+
+TCP connect/send/receive are nonblocking, with at most 1024 received bytes per
+main-loop poll, 15 seconds without progress and five minutes total allowed.
+Flash erase/write, installed-layout fingerprinting and final readback remain
+synchronous. After validation and successful activation, the command publishes
+its result and schedules the normal settings-save/restart path. Failure does
+not schedule a restart. Activation failure requires inspection before reboot:
+if trigger cleanup also failed, an update might still be armed. Download
+failures can be retried; a completed download is held until reboot.
+
+Integration evidence: `../../../../RnD/native-ota-http.md`.

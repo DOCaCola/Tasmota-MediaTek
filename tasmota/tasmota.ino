@@ -886,6 +886,7 @@ void loop(void) {
 #ifdef TASMOTA_PLATFORM_MT7697N
   NativeRtcPoll();
   WifiPollNtp();
+  NativeOtaPoll();
 #endif
   Scheduler();
 

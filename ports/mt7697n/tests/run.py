@@ -43,6 +43,19 @@ if __name__ == "__main__":
                     "-I" + str(PORT), "-I" + str(bear), str(HERE / "ota_test.cpp"),
                     str(PORT / "platform/ota.cpp"), *sha_objects, "-o", str(executable)], check=True)
     subprocess.run([str(executable), str(output / "ota-fixture.bin")], check=True)
+    executable = output / "ota-http.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(PORT), "-I" + str(bear), str(HERE / "ota_http_test.cpp"),
+                    str(PORT / "platform/ota.cpp"), str(PORT / "platform/ota_http.cpp"),
+                    *sha_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable), str(output / "ota-fixture.bin")], check=True)
+    executable = output / "ota-command.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(PORT), "-I" + str(bear), str(HERE / "ota_command_test.cpp"),
+                    str(PORT / "platform/ota.cpp"), str(PORT / "platform/ota_http.cpp"),
+                    *sha_objects, "-o", str(executable)], check=True)
+    for mode in range(4):
+        subprocess.run([str(executable), str(output / "ota-fixture.bin"), str(mode)], check=True)
     executable = output / "scan.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "network_fakes"), str(HERE / "scan_test.cpp"),

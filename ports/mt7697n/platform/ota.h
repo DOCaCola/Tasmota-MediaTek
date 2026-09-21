@@ -41,6 +41,7 @@ class OtaStager {
   OtaResult append(const void* bytes, size_t size);
   OtaResult finish();
   OtaResult activate();
+  void abort() { if (state_ != OtaState::Activated) state_ = OtaState::Failed; }
   OtaState state() const { return state_; }
   uint32_t received() const { return offset_; }
  private:
