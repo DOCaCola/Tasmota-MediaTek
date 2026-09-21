@@ -16,8 +16,9 @@ const ip_addr_t zero_ip{};
 void init_global_connsys() { initialized=true; }
 bool wifi_ready() { return initialized; }
 int wifi_config_set_radio(uint8_t on) {
-  int result=operation(on?'1':'0'); if (!on && result==0) link_status=0; return result;
+  (void)on;assert(false && "Station lifecycle must not toggle shared radio");return -1;
 }
+int wifi_connection_disconnect_ap() {int result=operation('D');if (result==0)link_status=0;return result;}
 int wifi_config_set_ssid(uint8_t port,uint8_t*,uint8_t) { assert(port==0);return operation('S'); }
 int wifi_config_set_security_mode(uint8_t port,int auth,int encryption) {
   assert(port==0);assert((auth==WIFI_AUTH_MODE_WPA2_PSK && encryption==WIFI_ENCRYPT_TYPE_AES_ENABLED)||
@@ -49,7 +50,7 @@ int main() {
   using namespace mt7697;
   assert(station_stop()); // no radio call before initialization
   assert(sequence.empty());
-  assert(station_start("router","password"));assert(sequence=="0SAK1R");
+  assert(station_start("router","password"));assert(sequence=="SAKR");
   assert(!station_online() && dhcp_calls==0);
   link_status=1;assert(!station_online() && dhcp_calls==1);
   assert(!station_online() && dhcp_calls==1); // no DHCP restart per poll
@@ -60,10 +61,10 @@ int main() {
   link_status=1;assert(!station_online());iface.ip_addr.addr=456;iface.lease=true;
   assert(station_online());link_status=0;assert(!station_online());
   assert(iface.ip_addr.addr==0 && !iface.link);
-  sequence.clear();assert(station_start("open",""));assert(sequence=="0SA1R");
+  sequence.clear();assert(station_start("open",""));assert(sequence=="DSAR");
   assert(station_stop());assert(!station_online());
   // Every configuration error blocks success and can be cleaned up.
-  for (int i=1;i<=6;++i) {
+  for (int i=1;i<=5;++i) {
     calls=0;fail_call=i;assert(!station_start("router","password"));
     assert(!station_online());fail_call=0;assert(station_stop());
   }

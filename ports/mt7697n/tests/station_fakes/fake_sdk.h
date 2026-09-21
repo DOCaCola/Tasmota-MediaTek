@@ -17,6 +17,7 @@ typedef int sys_sem_t;
 void init_global_connsys();
 bool wifi_ready();
 int wifi_config_set_radio(uint8_t);
+int wifi_connection_disconnect_ap();
 int wifi_config_set_ssid(uint8_t,uint8_t*,uint8_t);
 int wifi_config_set_security_mode(uint8_t,int,int);
 int wifi_config_set_wpa_psk_key(uint8_t,uint8_t*,uint8_t);

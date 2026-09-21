@@ -58,9 +58,9 @@ void NativeAPNetif(void* context) {
   sys_sem_signal(&request.completed);
 }
 void NativeWifiAPCleanup() {
+  // Removing the AP must leave the shared radio available to the station.
   const int mode=wifi_config_set_opmode(WIFI_MODE_STA_ONLY);
-  const int radio=wifi_config_set_radio(0);
-  if (mode<0 || radio<0)
+  if (mode<0)
     AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Failed to stop setup AP; restart required"));
 }
 bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
@@ -143,7 +143,7 @@ void NativeWifiTestBegin(const char* ssid,const char* password) {
   if (!NativeWifiRegisterFailureHandler()) {
     Wifi.wifi_test_counter=1;return;
   }
-  // Finish the HTTP response before cycling the radio for the trial.
+  // Finish the HTTP response before starting the station credential trial.
   native_test_pending=true;
 }
 bool NativeWifiTestHasIP(IPAddress* address) {
@@ -174,9 +174,9 @@ void NativeWifiTestRecoverAP() {
   // the complete AP configuration and its IP services, retaining web routes.
   const bool stopped=mt7697::station_stop();
   dhcpd_stop();
-  // Opmode changes require a running radio in this SDK.
-  if (!stopped || wifi_config_set_radio(1)<0 ||
-      wifi_config_set_opmode(WIFI_MODE_STA_ONLY)<0 ||
+  // station_stop leaves the shared radio running; set_radio is unsupported
+  // in repeater mode. Switch modes before NativeWifiStartAP enables STA radio.
+  if (!stopped || wifi_config_set_opmode(WIFI_MODE_STA_ONLY)<0 ||
       !NativeWifiStartAP(native_ap_name,native_ap_password,native_ap_channel)) {
     AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Setup AP recovery failed; restart required"));
   }

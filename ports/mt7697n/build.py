@@ -231,10 +231,17 @@ def main():
         link += ["-Wl,--undefined=mt7697_ota_link_check"]
     if options.application:
         link += ["-Wl,--undefined=mt7697_image_identity"]
+        # Temporary, read-only supplicant boundary diagnostics.
+        for name in ("wpa_supplicant_add_iface", "os_zalloc", "wpa_config_read",
+                     "wpa_config_alloc_new_conf", "os_strlcpy"):
+            link += ["-Wl,--wrap=" + name]
     command("arm-none-eabi-gcc", link)
     undefined = command("arm-none-eabi-nm", ["-u", elf.as_posix()])
     if undefined.strip():
         raise SystemExit("Unexpected unresolved ELF symbols:\n" + undefined)
+    if options.application:
+        subprocess.run([sys.executable, str(HERE / "tests/supplicant_trace_test.py"),
+                        str(elf)], check=True)
     binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
     if options.platform:
