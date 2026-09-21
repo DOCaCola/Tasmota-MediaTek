@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #ifdef TASMOTA_PLATFORM_MT7697N
+#include <platform/sdk_network.h>
 extern "C" {
 #include <wifi_api.h>
 #include <lwip/api.h>
@@ -27,7 +28,7 @@ uint32_t ESP_getChipId(void) {
 }
 
 bool WifiHasIP(void) {
-  return WiFi.status() == WL_CONNECTED && static_cast<uint32_t>(WiFi.localIP()) != 0;
+  return mt7697::station_online();
 }
 
 bool WifiGetIP(IPAddress* address, bool exclude_ap) {

@@ -8,6 +8,7 @@
 #define LOG_LEVEL_DEBUG 4
 #define WL_CONNECTED 3
 static bool online = true;
+namespace mt7697 { bool station_online() { return online; } }
 static int api_result = 0, dns_result = 0, dns_calls = 0;
 static uint32_t dns_address;
 static int last_phy = -1;

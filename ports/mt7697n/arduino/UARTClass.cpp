@@ -21,6 +21,9 @@
 #include <string.h>
 #include <hal_platform.h>
 #include <hal_uart.h>
+#ifdef TASMOTA_PLATFORM_MT7697N
+extern "C" bool native_uart_takeover(hal_uart_port_t port);
+#endif
 #include "pins_arduino.h"
 #include "UARTClass.h"
 #include "log_dump.h"
@@ -165,6 +168,10 @@ void UARTClass::init(const uint32_t dwBaudRate, const uint32_t modeReg)
 	uart_config.stop_bit	= (hal_uart_stop_bit_t)((modeReg & HARDSER_STOP_BIT_MASK) >> 2);
 	uart_config.word_length	= (hal_uart_word_length_t)((modeReg & HARDSER_DATA_MASK) >> 3);
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+	if (!native_uart_takeover(_uart_port))
+		return;
+#endif
 	if (HAL_UART_STATUS_OK != hal_uart_init(_uart_port, &uart_config))
 		return ;
 

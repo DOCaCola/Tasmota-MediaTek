@@ -7,11 +7,40 @@ extern "C" {
 #include <lwip/tcpip.h>
 #include <lwip/sys.h>
 }
-#include <utility/wifi_drv.h>
+#include <platform/sdk_network.h>
 #include <platform/wifi_startup.h>
 
 bool native_manager_active = false;
 uint32_t native_manager_tick = 0;
+char native_test_ssid[33] = {};
+char native_test_password[64] = {};
+bool native_test_accepted = false;
+bool native_test_pending = false;
+char native_ap_name[33] = {};
+char native_ap_password[64] = {};
+int native_ap_channel = 1;
+std::atomic<unsigned> native_connection_failure{0};
+bool native_failure_handler_registered = false;
+
+int32_t NativeWifiFailureEvent(wifi_event_t, uint8_t* payload, uint32_t length) {
+  // Preserve the SDK's port/reason bytes; logging happens on the main task.
+  if (length >= 3) {
+    native_connection_failure.store(0x80000000u | unsigned(payload[0]) |
+        (unsigned(payload[1]) << 8) | (unsigned(payload[2]) << 16));
+  }
+  return 0;
+}
+bool NativeWifiRegisterFailureHandler() {
+  if (native_failure_handler_registered) return true;
+  const int result=wifi_connection_register_event_handler(
+      WIFI_EVENT_IOT_CONNECTION_FAILED,NativeWifiFailureEvent);
+  if (result<0) {
+    AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Failure-event registration failed (%d)"),result);
+    return false;
+  }
+  native_failure_handler_registered=true;
+  return true;
+}
 
 String IPForUrl(const IPAddress& ip) { return ip.toString(); }
 uint8_t WifiConfigCounter() {
@@ -76,6 +105,10 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
   strcpy(reinterpret_cast<char*>(dhcp.dhcpd_primary_dns),"192.168.4.1");
   strcpy(reinterpret_cast<char*>(dhcp.dhcpd_secondary_dns),"192.168.4.1");
   if (dhcpd_start(&dhcp)<0) { NativeWifiAPCleanup(); return false; }
+  memmove(native_ap_name,name,strlen(name)+1);
+  const char* password=passphrase?passphrase:"";
+  memmove(native_ap_password,password,strlen(password)+1);
+  native_ap_channel=channel;
   native_manager_active=true;
   native_manager_tick=millis();
   Wifi.config_counter=180;
@@ -93,6 +126,9 @@ void NativeWifiManagerStop() {
   Wifi.config_counter=0;
 }
 void NativeWifiTestBegin(const char* ssid,const char* password) {
+  native_test_accepted=false;
+  native_test_pending=false;
+  memset(native_test_password,0,sizeof(native_test_password));
   const size_t sl=strlen(ssid),pl=strlen(password);
   if (!sl || sl>32 || (pl && (pl<8 || pl>63))) {
     Wifi.wifi_test_counter=1;return;
@@ -102,10 +138,55 @@ void NativeWifiTestBegin(const char* ssid,const char* password) {
       Wifi.wifi_test_counter=1;return;
     }
   }
-  int result=password[0] ? WiFiDrv::wifiSetPassphrase(ssid,sl,password,pl) : WiFiDrv::wifiSetNetwork(ssid,sl);
-  if (result!=WL_SUCCESS) Wifi.wifi_test_counter=1;
+  memcpy(native_test_ssid,ssid,sl+1);
+  memcpy(native_test_password,password,pl+1);
+  if (!NativeWifiRegisterFailureHandler()) {
+    Wifi.wifi_test_counter=1;return;
+  }
+  // Finish the HTTP response before cycling the radio for the trial.
+  native_test_pending=true;
+}
+bool NativeWifiTestHasIP(IPAddress* address) {
+  if (native_test_pending) {
+    native_test_pending=false;
+    native_test_accepted=mt7697::station_start(native_test_ssid,native_test_password);
+    AddLog(LOG_LEVEL_INFO,PSTR("WIF: Station configuration result %d"),native_test_accepted);
+    if (!native_test_accepted) Wifi.wifi_test_counter=1;
+    return false;
+  }
+  return native_test_accepted &&
+      WifiGetIP(address,true);
+}
+void NativeWifiTestCommit() {
+  Settings->sta_active=0;
+  SettingsUpdateText(SET_STASSID1,native_test_ssid);
+  SettingsUpdateText(SET_STAPWD1,native_test_password);
+  memset(native_test_password,0,sizeof(native_test_password));
+}
+String NativeWifiTestSSID() { return String(native_test_ssid); }
+void NativeWifiTestDiscard() {
+  native_test_accepted=false;
+  native_test_pending=false;
+  memset(native_test_password,0,sizeof(native_test_password));
+}
+void NativeWifiTestRecoverAP() {
+  // Changing modes resets the SDK's continuing connection attempts. Reapply
+  // the complete AP configuration and its IP services, retaining web routes.
+  const bool stopped=mt7697::station_stop();
+  dhcpd_stop();
+  // Opmode changes require a running radio in this SDK.
+  if (!stopped || wifi_config_set_radio(1)<0 ||
+      wifi_config_set_opmode(WIFI_MODE_STA_ONLY)<0 ||
+      !NativeWifiStartAP(native_ap_name,native_ap_password,native_ap_channel)) {
+    AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Setup AP recovery failed; restart required"));
+  }
 }
 void NativeWifiManagerPoll() {
+  const unsigned failure=native_connection_failure.exchange(0);
+  if (failure) {
+    AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Station failure port %u, reason bytes %02X %02X"),
+      failure & 255,(failure >> 8)&255,(failure >> 16)&255);
+  }
   if (!native_manager_active) return;
   if (uint32_t(millis()-native_manager_tick)>=1000) {
     native_manager_tick=millis();

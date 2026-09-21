@@ -37,13 +37,22 @@ std::string EscapeJSONString(const char* text) { return text; }
 void AddLog(unsigned, const char*, ...) {}
 #include "../../../tasmota/tasmota_support/support_scan_mt7697.ino"
 static int fail_at = 0;
+static uint8_t operating_mode = WIFI_MODE_STA_ONLY;
+static int observed_scan_mode = -1;
 static int stop_calls = 0, deinit_calls = 0, unregister_calls = 0;
 extern "C" {
+int32_t wifi_config_get_opmode(uint8_t* mode) {
+  *mode = operating_mode;
+  return fail_at == 7 ? -1 : 0;
+}
 int32_t wifi_connection_scan_init(wifi_scan_list_item_t* data, uint32_t count) {
   assert(data == NativeScan.entries && count == 16); return fail_at == 2 ? -1 : 0;
 }
 int32_t wifi_connection_scan_deinit() { ++deinit_calls; return fail_at == 4 ? -1 : 0; }
-int32_t wifi_connection_start_scan(uint8_t*, uint8_t, uint8_t*, uint8_t, uint8_t) {
+int32_t wifi_connection_start_scan(uint8_t*, uint8_t, uint8_t*, uint8_t mode, uint8_t) {
+  observed_scan_mode = mode;
+  // Model the SDK restriction rather than accepting every mode combination.
+  if (mode != (operating_mode == WIFI_MODE_STA_ONLY ? 0 : 1)) return -1;
   return fail_at == 3 ? -1 : 0;
 }
 int32_t wifi_connection_stop_scan() { ++stop_calls; return fail_at == 5 ? -1 : 0; }
@@ -59,10 +68,21 @@ void reset() {
   NativeScan.attached = NativeScan.registered = false;
   NativeScan.complete.store(false);
   fail_at = 0; ready = true; now = 0;
+  operating_mode = WIFI_MODE_STA_ONLY; observed_scan_mode = -1;
   stop_calls = deinit_calls = unregister_calls = 0;
   XdrvMailbox.data_len = 1;
 }
 int main() {
+  for (uint8_t mode : {WIFI_MODE_STA_ONLY, WIFI_MODE_AP_ONLY, WIFI_MODE_REPEATER}) {
+    reset(); operating_mode = mode;
+    assert(NativeScanStart());
+    assert(observed_scan_mode == (mode == WIFI_MODE_STA_ONLY ? 0 : 1));
+    NativeScanEvent(WIFI_EVENT_IOT_SCAN_COMPLETE, nullptr, 0);
+    NativeScanPoll();
+    assert(NativeScan.valid);
+  }
+  reset(); fail_at = 7;
+  assert(!NativeScanStart() && !NativeScan.registered && !NativeScan.attached);
   reset(); ready = false; CmndWifiScan();
   assert(!NativeScan.running && response == "Station radio is not ready");
   for (int failure = 1; failure <= 3; ++failure) {

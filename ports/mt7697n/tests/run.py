@@ -27,10 +27,24 @@ if __name__ == "__main__":
             raise RuntimeError("Core function not found: " + name)
         functions.append(match.group())
     (output / "core_settings_functions.inc").write_text("\n\n".join(functions))
+    manager_source = (core / "tasmota_xdrv_driver/xdrv_01_z_manager_mt7697.ino").read_text()
+    trial_functions = []
+    for name in ("NativeWifiTestBegin", "NativeWifiTestHasIP", "NativeWifiTestCommit", "NativeWifiTestDiscard"):
+        match = re.search(r"^(?:void|bool) " + name + r"\([^;\n]*\) \{.*?^\}", manager_source, re.M | re.S)
+        if not match:
+            raise RuntimeError("Trial function not found: " + name)
+        trial_functions.append(match.group())
+    (output / "wifi_trial_functions.inc").write_text("\n\n".join(trial_functions))
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
     subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
+    executable = output / "sdk-station.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(HERE / "station_fakes"),
+                    str(HERE / "sdk_station_test.cpp"), str(PORT / "platform/sdk_network.cpp"),
+                    str(PORT / "platform/network.cpp"), "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
     executable = output / "wifi-country.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "country_fakes"),
@@ -76,6 +90,7 @@ if __name__ == "__main__":
     # only SDK calls are replaced to exercise error paths without hardware.
     # This runs after the Arduino C objects have been generated below.
     cases = {
+        "wifi-trial": [HERE / "wifi_trial_test.cpp"],
         "ntp-service": [HERE / "ntp_service_test.cpp"],
         "ntp": [HERE / "ntp_test.cpp"],
         "pwm": [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"],
@@ -111,7 +126,7 @@ if __name__ == "__main__":
     executable = output / "network-details.exe"
     subprocess.run([
         options.cxx, "-std=c++17", "-Wall", "-Wextra",
-        "-I" + str(HERE / "network_fakes"), "-I" + str(arduino),
+        "-I" + str(HERE / "network_fakes"), "-I" + str(PORT), "-I" + str(arduino),
         str(HERE / "network_details_test.cpp"),
         *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
         *c_objects, "-o", str(executable)], check=True)

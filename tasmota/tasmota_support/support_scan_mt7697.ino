@@ -60,6 +60,14 @@ void NativeScanPoll(void) {
 bool NativeScanStart() {
   NativeScanPoll();
   if (!wifi_ready() || NativeScan.fault || NativeScan.running) return false;
+    uint8_t mode;
+    if (wifi_config_get_opmode(&mode) < 0) {
+      AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Cannot read scan operating mode"));
+      return false;
+    }
+    // The SDK permits full scans only in STA mode. AP/repeater scans must
+    // revisit the AP channel between batches to keep clients connected.
+    const uint8_t scan_mode = mode == WIFI_MODE_STA_ONLY ? 0 : 1;
     NativeScan.valid = false;
     NativeScan.complete.store(false, std::memory_order_release);
     memset(NativeScan.entries, 0, sizeof(NativeScan.entries));
@@ -72,7 +80,9 @@ bool NativeScanStart() {
       return false;
     }
     NativeScan.attached = true;
-    if (wifi_connection_start_scan(nullptr, 0, nullptr, 0, 0) < 0) {
+    const int result = wifi_connection_start_scan(nullptr, 0, nullptr, scan_mode, 0);
+    if (result < 0) {
+      AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Scan start failed (%d), operating mode %u"), result, mode);
       NativeScanRelease();
       return false;
     }
@@ -129,11 +139,13 @@ void CmndWifiScan(void) {
 uint8_t native_web_scan_indices[16];
 unsigned native_web_scan_count=0;
 int NativeWebScan() {
-  if (!NativeScan.running && !NativeScanStart()) return 0;
+  native_web_scan_count=0;
+  if (!NativeScan.running && !NativeScanStart()) return -1;
   while (NativeScan.running) { NativeScanPoll(); delay(10); }
   unsigned& count=native_web_scan_count;
   count=0;
-  if (NativeScan.valid) {
+  if (!NativeScan.valid) return -1;
+  {
     for (unsigned i=0;i<16;++i) {
       if (NativeScan.entries[i].is_valid && NativeScan.entries[i].ssid_length<=32)
         native_web_scan_indices[count++]=i;

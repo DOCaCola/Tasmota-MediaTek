@@ -59,6 +59,9 @@ void WifiConnect(void) {
 #endif
     return;
   }
+#ifdef USE_WEBSERVER
+  NativeWifiRegisterFailureHandler();
+#endif
   if (!mt7697::station().begin(ssid, password, millis())) {
     AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Native station start failed (%u)"),
            static_cast<unsigned>(mt7697::station().error()));
@@ -73,6 +76,15 @@ void WifiCheckIp(void) {
   }
 #endif
   mt7697::station().poll(millis());
+#ifdef USE_WEBSERVER
+  if (mt7697::station().state() == mt7697::NetworkState::RetryWait &&
+      mt7697::station().error() != mt7697::NetworkError::None) {
+    // A saved station that cannot connect must not strand setup users.
+    WifiShutdown(false);
+    if (mt7697::station().state() == mt7697::NetworkState::Disabled) WifiManagerBegin(false);
+    return;
+  }
+#endif
   const bool online = mt7697::station().state() == mt7697::NetworkState::Online;
   Wifi.status = online ? WL_CONNECTED : WL_DISCONNECTED;
   WifiSetState(online ? 1 : 0);

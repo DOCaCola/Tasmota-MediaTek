@@ -803,8 +803,19 @@ void WifiManagerBegin(bool reset_only) {
 /*-------------------------------------------------------------------------------------------*/
 
 void PollDnsWebserver(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  static bool trace = true;
+  if (trace) AddLog(LOG_LEVEL_INFO, PSTR("DBG: DNS poll entering"));
+#endif
   if (DnsServer) { DnsServer->processNextRequest(); }
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (trace) AddLog(LOG_LEVEL_INFO, PSTR("DBG: HTTP poll entering"));
+#endif
   if (Webserver) { Webserver->handleClient(); }
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (trace) AddLog(LOG_LEVEL_INFO, PSTR("DBG: HTTP poll returned"));
+  trace = false;
+#endif
 }
 
 /*********************************************************************************************/
@@ -2568,21 +2579,37 @@ void HandleWifiConfiguration(void) {
       // Test WIFI Connection to Router
       // As Tasmota is in this case in AP mode, a STA connection can be established too at the same time
 
+#ifndef TASMOTA_PLATFORM_MT7697N
       if (WIFI_NOT_TESTING == Wifi.wifiTest) {
         if (MAX_WIFI_OPTION == Wifi.old_wificonfig) { Wifi.old_wificonfig = Settings->sta_config; }
         TasmotaGlobal.wifi_state_flag = Settings->sta_config = WIFI_MANAGER;
         Wifi.save_data_counter = TasmotaGlobal.save_data_counter;
       }
+#endif
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+      Wifi.wifi_test_counter = 30;  // Association plus DHCP, matching native station timeout.
+#else
       Wifi.wifi_test_counter = 9;   // seconds to test user's proposed AP
+#endif
       Wifi.wifiTest = WIFI_TESTING;
+#ifndef TASMOTA_PLATFORM_MT7697N
       TasmotaGlobal.save_data_counter = 0;               // Stop auto saving data - Updating Settings
       Settings->save_data = 0;
+#endif
       TasmotaGlobal.sleep = 0;                           // Disable sleep
       TasmotaGlobal.restart_flag = 0;                    // No restart
       TasmotaGlobal.ota_state_flag = 0;                  // No OTA
 //      TasmotaGlobal.blinks = 0;                          // Disable blinks initiated by WifiManager
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+      // Keep unverified credentials out of Settings: other core save paths
+      // (including boot-count updates) can run while the connection is tested.
+      String candidate_ssid=Webserver->arg(F("s1"));
+      String candidate_password=Webserver->arg(F("p1"));
+      AddLog(LOG_LEVEL_INFO,PSTR("WIF: Testing proposed station credentials"));
+      NativeWifiTestBegin(candidate_ssid.c_str(),candidate_password.c_str());
+#else
       WebGetArg(PSTR("s1"), tmp, sizeof(tmp));   // SSID1
       SettingsUpdateText(SET_STASSID1, tmp);
       WebGetArg(PSTR("p1"), tmp, sizeof(tmp));   // PASSWORD1
@@ -2591,9 +2618,6 @@ void HandleWifiConfiguration(void) {
       AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CONNECTING_TO_AP " %s " D_AS " %s ..."),
         SettingsText(SET_STASSID1), TasmotaGlobal.hostname);
 
-#ifdef TASMOTA_PLATFORM_MT7697N
-      NativeWifiTestBegin(SettingsText(SET_STASSID1), SettingsText(SET_STAPWD1));
-#else
       WiFiHelper::begin(SettingsText(SET_STASSID1), SettingsText(SET_STAPWD1));
 #endif
 
@@ -2656,9 +2680,17 @@ void HandleWifiConfiguration(void) {
 #endif
       AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_SCAN_DONE));
 
-      if (0 == n) {
+      if (n <= 0) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+        if (n < 0) {
+          AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Web scan failed"));
+          WSContentSend_P(PSTR("Wi-Fi scan failed. Retry scanning or enter the network name manually."));
+        } else
+#endif
+        {
         AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_NO_NETWORKS_FOUND));
         WSContentSend_P(PSTR(D_NO_NETWORKS_FOUND));
+        }
         limitScannedNetworks = false; // in order to show D_SCAN_FOR_WIFI_NETWORKS
       } else {
         //sort networks
@@ -2833,10 +2865,18 @@ void HandleWifiConfiguration(void) {
 
     if (WIFI_TESTING == Wifi.wifiTest) {
       WSContentSend_P(PSTR(D_TRYING_TO_CONNECT "<br>%s</h3></div>"), 
+#ifdef TASMOTA_PLATFORM_MT7697N
+        HtmlEscape(NativeWifiTestSSID()).c_str());
+#else
         SettingsTextEscaped(SET_STASSID1).c_str());
+#endif
     } else if (WIFI_TEST_FINISHED_BAD == Wifi.wifiTest) {
       WSContentSend_P(PSTR(D_CONNECT_FAILED_TO " %s<br>" D_CHECK_CREDENTIALS "</h3></div>"),
+#ifdef TASMOTA_PLATFORM_MT7697N
+        HtmlEscape(NativeWifiTestSSID()).c_str());
+#else
         SettingsTextEscaped(SET_STASSID1).c_str());
+#endif
     }
     // More Options Button
     WSContentSend_P(PSTR("<div id=butmod style=\"display:%s;\"></div><p></p><form id=butmo style=\"display:%s;\"><button type='button' onclick='hidBtns()'>" D_SHOW_MORE_OPTIONS "</button></form>"),
@@ -4848,17 +4888,28 @@ bool Xdrv01(uint32_t function) {
         Wifi.wifi_test_counter--;
         AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_TRYING_TO_CONNECT " %s"), SettingsText(SET_STASSID1));
         IPAddress local_ip;
+#ifdef TASMOTA_PLATFORM_MT7697N
+        if (NativeWifiTestHasIP(&local_ip)) {
+#else
         if (WifiGetIP(&local_ip, true)) {            // Got IP - Connection Established (exclude AP address)
+#endif
+#ifdef TASMOTA_PLATFORM_MT7697N
+          NativeWifiTestCommit();
+#endif
           Wifi.wifi_test_AP_TIMEOUT = false;
           Wifi.wifi_test_counter = 0;
           Wifi.wifiTest = WIFI_TEST_FINISHED;
           AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CMND_SSID " %s: " D_CONNECTED " - " D_IP_ADDRESS " %s"), SettingsText(Wifi.wifi_Test_Save_SSID2 ? SET_STASSID2 : SET_STASSID1), local_ip.toString().c_str());
 //          TasmotaGlobal.blinks = 255;                    // Signal wifi connection with blinks
+#ifndef TASMOTA_PLATFORM_MT7697N
           if (MAX_WIFI_OPTION != Wifi.old_wificonfig) {
             TasmotaGlobal.wifi_state_flag = Settings->sta_config = Wifi.old_wificonfig;
           }
           TasmotaGlobal.save_data_counter = Wifi.save_data_counter;
           Settings->save_data = Wifi.save_data_counter;
+#else
+          TasmotaGlobal.sleep=Settings->sleep;
+#endif
           SettingsSaveAll();
 
           if ( Wifi.wifi_Test_Restart ) { TasmotaGlobal.restart_flag = 2; }
@@ -4868,8 +4919,19 @@ bool Xdrv01(uint32_t function) {
           Web.state = HTTP_ADMIN;
 #endif
         } else if (!Wifi.wifi_test_counter) { // Test TimeOut
+#ifdef TASMOTA_PLATFORM_MT7697N
+          NativeWifiTestDiscard();
+          TasmotaGlobal.sleep=Settings->sleep;
+#endif
           Wifi.wifi_test_counter = 0;
           Wifi.wifiTest = WIFI_TEST_FINISHED_BAD;
+#ifdef TASMOTA_PLATFORM_MT7697N
+          uint8_t station_link=0;
+          wifi_connection_get_link_status(&station_link);
+          AddLog(LOG_LEVEL_INFO,PSTR("WIF: Trial timed out (%s)"),
+              station_link==WIFI_STATUS_LINK_CONNECTED ? "associated, no DHCP lease" : "not associated");
+          Wifi.wifi_test_AP_TIMEOUT=false;
+#else
           switch (WiFi.status()) {
             case WL_CONNECTED:
               AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CONNECT_FAILED_NO_IP_ADDRESS));
@@ -4893,6 +4955,7 @@ bool Xdrv01(uint32_t function) {
               //
               //   If it fails again, depending on the WIFICONFIG settings, the user will need to wait or will need to
               //   push 6 times the button to enable Tasmota AP mode again.
+#ifndef TASMOTA_PLATFORM_MT7697N
               if (Wifi.wifi_test_AP_TIMEOUT) {
                 Wifi.wifiTest = WIFI_TEST_FINISHED;
                 AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CMND_SSID " %s: " D_ATTEMPTING_CONNECTION), SettingsText(Wifi.wifi_Test_Save_SSID2 ? SET_STASSID2 : SET_STASSID1) );
@@ -4903,10 +4966,12 @@ bool Xdrv01(uint32_t function) {
                 Settings->save_data = Wifi.save_data_counter;
                 SettingsSaveAll();
               }
+#endif
               Wifi.wifi_test_AP_TIMEOUT = true;
           }
+#endif
 #ifdef TASMOTA_PLATFORM_MT7697N
-          NativeScanStart();
+          NativeWifiTestRecoverAP();
 #else
           WiFi.scanNetworks(); // restart scan
 #endif

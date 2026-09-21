@@ -1,6 +1,10 @@
 #pragma once
 #include <stdint.h>
 #define WIFI_PORT_STA 0
+#define WIFI_MODE_STA_ONLY 1
+#define WIFI_MODE_AP_ONLY 2
+#define WIFI_MODE_REPEATER 3
+int32_t wifi_config_get_opmode(uint8_t*);
 typedef enum {
   WIFI_PHY_11BG_MIXED = 0, WIFI_PHY_11B = 1, WIFI_PHY_11G = 4,
   WIFI_PHY_11N_2_4G = 6, WIFI_PHY_11GN_MIXED = 7, WIFI_PHY_11BGN_MIXED = 9

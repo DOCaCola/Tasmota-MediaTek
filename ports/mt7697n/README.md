@@ -263,3 +263,19 @@ The console, settings pages and native URL OTA are available. Multipart file
 uploads/settings restore and GPIO/template configuration are not implemented.
 The transport limits requests to 8 KiB and closes each connection after one
 response. HTTP authentication uses the standard Tasmota web password.
+
+### Wi-Fi station review (2026-09-21)
+
+The native station backend configures WPA2-PSK/AES (or open networks), owns
+station DHCP/netif updates on the TCP/IP task, and does not use the Arduino
+station event callbacks. Credential trials are staged in RAM, start on a later
+main-task tick, and commit SSID slot 1 only after a fresh DHCP lease. Failed
+saved-station attempts return to the setup AP after cleanup. Radio changes can
+briefly disconnect AP clients. WPA3/SAE is not implemented.
+
+Host coverage includes SDK-call/thread ownership and failure injection, stale
+lease rejection, and the production credential-trial functions. AP access,
+DHCP clients and scan were previously demonstrated on the lamp; this revised
+station/AP-transition path and remote OTA still need hardware validation.
+See workspace `RnD/station-connection-investigation.md` for captures and the
+hashed next candidate. Do not conflate a passing host test with a working radio.

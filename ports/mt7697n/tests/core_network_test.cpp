@@ -48,6 +48,7 @@ unsigned manager_starts=0;
 void NativeWifiManagerStop() {manager_active=false;}
 bool NativeWifiManagerActive() {return manager_active;}
 void NativeWifiManagerPoll() {}
+bool NativeWifiRegisterFailureHandler() {return true;}
 void WifiManagerBegin(bool) {manager_active=true;++manager_starts;}
 bool WifiHasIP() {return driver.connected;}
 #include "tasmota_support/support_wifi_mt7697.ino"
@@ -100,6 +101,12 @@ int main() {
   assert(mt7697::station().state() == mt7697::NetworkState::Disabled);
   assert(TasmotaGlobal.global_state.network_down);
   Settings->flag4.network_wifi = true;
+  WifiEnable();
+  const unsigned previous_managers=manager_starts;
+  now+=30000;
+  WifiCheck(WIFI_RETRY);
+  assert(manager_active && manager_starts==previous_managers+1);
+  assert(mt7697::station().state()==mt7697::NetworkState::Disabled);
   WifiEnable();
   driver.stops_ok = false;
   WifiDisable();
