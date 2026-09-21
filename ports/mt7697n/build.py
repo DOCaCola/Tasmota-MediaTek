@@ -259,6 +259,10 @@ def main():
         if image_extent != binary.stat().st_size:
             binary.unlink()
             raise SystemExit("Runtime image extent does not match binary length")
+    if options.application:
+        subprocess.run([sys.executable, str(HERE / "package_ota.py"),
+                        str(binary), str(BUILD / "tasmota-ota.bin"),
+                        "--elf", str(elf)], check=True)
     size = command("arm-none-eabi-size", [elf.as_posix()])
     print(size)
     metadata = {
