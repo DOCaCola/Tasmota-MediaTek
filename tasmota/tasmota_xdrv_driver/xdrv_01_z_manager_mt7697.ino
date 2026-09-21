@@ -8,6 +8,7 @@ extern "C" {
 #include <lwip/sys.h>
 }
 #include <utility/wifi_drv.h>
+#include <platform/wifi_startup.h>
 
 bool native_manager_active = false;
 uint32_t native_manager_tick = 0;
@@ -36,6 +37,8 @@ void NativeWifiAPCleanup() {
 bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio init, reset %s, heap %u, stack %u"),
     mt7697::reset_reason_text(),mt7697::free_heap(),mt7697::stack_low_water_bytes());
+  const bool first_init=!wifi_ready();
+  if (first_init && !mt7697::prepare_setup_ap(name,passphrase?passphrase:"",channel)) return false;
   init_global_connsys();
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio ready; configuring AP+STA"));
   const auto configure=[&]() {
@@ -51,7 +54,7 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
         reinterpret_cast<uint8_t*>(const_cast<char*>(passphrase)),strlen(passphrase))<0) return false;
     return wifi_config_reload_setting()>=0;
   };
-  if (!configure()) { NativeWifiAPCleanup(); return false; }
+  if (!first_init && !configure()) { NativeWifiAPCleanup(); return false; }
   AddLog(LOG_LEVEL_INFO,PSTR("WIF: AP+STA configured; starting IP services"));
   NativeAPContext request={netif_find_by_type(NETIF_TYPE_AP),{}};
   if (!request.ap || sys_sem_new(&request.completed,0)!=ERR_OK) {
