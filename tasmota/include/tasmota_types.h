@@ -715,7 +715,9 @@ typedef struct {
   mytmplt       user_template;             // 3FC: warm/cold/night plus flags, 8 bytes
   uint8_t       lamp_config_version;       // 404: native lamp settings schema
   uint8_t       lamp_night;                // 405: 0 daylight, 1 night
-  uint8_t       reserved_mt7697_406[75];    // 406
+  uint8_t       lamp_day_dimmer;           // 406: separate daylight brightness
+  uint8_t       lamp_night_dimmer;         // 407: separate night brightness
+  uint8_t       reserved_mt7697_408[73];    // 408
   char          serial_delimiter;          // 451
   uint8_t       seriallog_level;           // 452
   uint8_t       sleep;                     // 453

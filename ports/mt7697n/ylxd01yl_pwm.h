@@ -5,6 +5,8 @@
 namespace ylxd01yl {
 constexpr uint32_t kFrequencyHz = 10000;
 constexpr uint32_t kPeriodCounts = 4000;
+// Stock pure-warm <-> pure-cold fades substitute 320 for the zero endpoints.
+constexpr uint32_t kMaxCombinedCounts = kPeriodCounts + 320;
 struct PwmStatus {
   uint32_t duty[3] = {}, frequency[3] = {};
   bool running[3] = {};

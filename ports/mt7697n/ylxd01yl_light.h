@@ -71,6 +71,23 @@ inline uint32_t nightFraction(float brightness) {
   return uint32_t(brightness*kPeriodCounts+0.49f);
 }
 
+// Product transition setup sets minimumbrightness15 for daylight, 0 for night.
+// Keep the stock single-precision operation order, including its two FMAs.
+inline float brightnessFraction(unsigned percent, unsigned minimum) {
+  if (!percent) return 0;
+  if (percent > 100) percent=100;
+  if (!minimum) return percent/100.0f;
+  const float m=minimum;
+  const float intercept=__builtin_fmaf(-m,100.0f,100.0f)/-99.0f;
+  const float slope=(m-100.0f)/-99.0f;
+  return __builtin_fmaf(float(percent),slope,intercept)/100.0f;
+}
+
+inline Duties target(unsigned kelvin, unsigned percent, bool night) {
+  return night ? Duties{0,0,nightFraction(brightnessFraction(percent,0))} :
+                 daylightFraction(kelvin,brightnessFraction(percent,15));
+}
+
 // Input is the current faded/gamma-corrected Tasmota CCT frame, cold first.
 // Derive temperature from this frame, not from the final requested CT.
 inline Duties frame(unsigned cold, unsigned warm, bool night) {

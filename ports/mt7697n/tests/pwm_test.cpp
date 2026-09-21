@@ -30,7 +30,7 @@ hal_pwm_status_t hal_pwm_set_duty_cycle(hal_pwm_channel_t channel, uint32_t duty
   initialized[channel] = true;
   ++writes;
   // These invariants are checked at every hardware write, not just at the end.
-  assert(duties[32] + duties[33] <= 4000);
+  assert(duties[32] + duties[33] <= 4320);
   assert(duties[31] <= 4000);
   assert(duties[31] == 0 || (duties[32] == 0 && duties[33] == 0));
   return HAL_PWM_STATUS_OK;
@@ -89,7 +89,7 @@ int main() {
   assert(light.night(1));
   assert(light.off());
   const unsigned before = writes;
-  assert(!light.daylight(4000, 1));
+  assert(!light.daylight(4000, 321));
   assert(!light.daylight(UINT_MAX, 1));
   assert(!light.night(4001));
   assert(writes == before);

@@ -82,7 +82,8 @@ bool Pwm::status(PwmStatus& result) const {
 
 bool Pwm::daylight(uint32_t warm, uint32_t cold) {
   // Conservative combined duty envelope; no independent full-power channels.
-  if (warm > kPeriodCounts || cold > kPeriodCounts - warm) return false;
+  if (warm > kPeriodCounts || cold > kPeriodCounts ||
+      warm+cold > kMaxCombinedCounts) return false;
   return apply(warm, cold, 0);
 }
 

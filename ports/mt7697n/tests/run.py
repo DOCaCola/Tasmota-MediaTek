@@ -46,6 +46,7 @@ if __name__ == "__main__":
     subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
     for name, sources in (
         ("lamp", [HERE / "lamp_test.cpp"]),
+        ("fade", [HERE / "fade_test.cpp"]),
         ("lamp-driver", [HERE / "lamp_driver_test.cpp", PORT / "ylxd01yl_pwm.cpp"]),
         ("pwm", [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"]),
     ):

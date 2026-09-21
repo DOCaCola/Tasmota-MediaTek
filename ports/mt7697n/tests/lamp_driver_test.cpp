@@ -9,12 +9,12 @@
 #define USE_YLXD01YL_LIGHT
 #define PROGMEM
 #define PSTR(x) x
-enum {FUNC_MODULE_INIT,FUNC_PRE_INIT,FUNC_SET_CHANNELS,FUNC_COMMAND,
+enum {FUNC_LOOP,FUNC_MODULE_INIT,FUNC_PRE_INIT,FUNC_SET_CHANNELS,FUNC_COMMAND,
       FUNC_WEB_ADD_MAIN_BUTTON,FUNC_WEB_GET_ARG,FUNC_ABOUT_TO_RESTART};
-enum {LOG_LEVEL_INFO,LOG_LEVEL_ERROR,LT_CW=10,P_RGB_REMAP=0};
+enum {LOG_LEVEL_INFO,LOG_LEVEL_ERROR,LT_CW=10,P_RGB_REMAP=0,LS_POWER=0};
 struct Config {
   uint8_t lamp_config_version=0,lamp_night=0,light_dimmer=100,poweronstate=3;
-  uint8_t light_correction=1;
+  uint8_t light_correction=1,light_fade=0,lamp_day_dimmer=0,lamp_night_dimmer=0,light_scheme=0;
   unsigned save_data=300;
   unsigned power=1;
   uint8_t light_color[5]={255,255,255,255,255};
@@ -23,7 +23,7 @@ struct Config {
   struct { bool pwm_ct_mode=false; } flag4;
 } config;
 Config* Settings=&config;
-struct {unsigned light_type=0,light_driver=0,save_data_counter=300;} TasmotaGlobal;
+struct {unsigned light_type=0,light_driver=0,save_data_counter=300; bool skip_light_fade=false;} TasmotaGlobal;
 struct {int data_len=0,payload=-1;char* command=nullptr;} XdrvMailbox;
 template<class... T> void AddLog(T...) {}
 template<class... T> void Response_P(T...) {}
@@ -31,8 +31,15 @@ template<class... T> void WSContentSend_P(T...) {}
 bool DecodeCommand(const char*,void(*const* commands)()) {commands[0]();return true;}
 unsigned ct_min,ct_max;
 void setCTRange(unsigned a,unsigned b) {ct_min=a;ct_max=b;}
-struct {unsigned getCT(){return 250;} unsigned getBriCT(){return 25;}} light_state;
-struct {void changeCTB(unsigned,unsigned){}} light_controller;
+static uint32_t now;
+uint32_t millis() {return now;}
+struct {bool update=false,power=true,fade_initialized=false,fade_running=false;
+ bool fade_once_enabled=false,speed_once_enabled=false;} Light;
+bool LightGetFadeSetting(){return Settings->light_fade;}
+unsigned LightGetSpeedSetting(){return 1;}
+struct {unsigned ct=250,dimmer=100; unsigned getCT(){return ct;}
+ unsigned getBriCT(){return 25;} unsigned getDimmer(){return dimmer;}} light_state;
+struct {void changeCTB(unsigned,unsigned){} void changeDimmer(unsigned d){light_state.dimmer=d;}} light_controller;
 std::string webarg,webcommand;
 void WebGetArg(const char*,char* value,unsigned size) {snprintf(value,size,"%s",webarg.c_str());}
 void ExecuteWebCommand(char* command) {webcommand=command;}
@@ -51,7 +58,7 @@ hal_pwm_status_t hal_pwm_set_frequency(hal_pwm_channel_t,uint32_t hz,uint32_t* n
 hal_pwm_status_t hal_pwm_set_duty_cycle(hal_pwm_channel_t c,uint32_t value) {
   if(fail_write){fail_write=false;return HAL_PWM_STATUS_ERROR;}
   duties[c]=value;
-  assert(duties[32]+duties[33]<=4000);
+  assert(duties[32]+duties[33]<=4320);
   assert(!duties[31] || (!duties[32] && !duties[33]));
   return HAL_PWM_STATUS_OK;
 }
@@ -73,28 +80,39 @@ int main() {
   assert(Xlgt12(FUNC_MODULE_INIT));
   assert(TasmotaGlobal.light_type==LT_CW && YlxdReady);
   assert(!Settings->power && !Settings->poweronstate && Settings->light_dimmer==10);
-  assert(Settings->lamp_config_version==2 && !Settings->light_correction);
+  assert(Settings->lamp_config_version==3 && !Settings->light_correction);
+  assert(Settings->lamp_day_dimmer==10 && Settings->lamp_night_dimmer==5);
   assert(Xlgt12(FUNC_PRE_INIT) && ct_min==153 && ct_max==370);
-  uint16_t channels[2]={1023,0};
-  XdrvMailbox.command=reinterpret_cast<char*>(channels);
+  light_state.ct=153;
   assert(Xlgt12(FUNC_SET_CHANNELS) && duties[33]==4000 && !duties[32]);
-  channels[0]=0;channels[1]=1023;
+  light_state.ct=370;
   Xlgt12(FUNC_SET_CHANNELS);
-  assert(duties[32]==4000 && !duties[33]);
+  assert(Light.fade_running && duties[33] && duties[32]);
+  now=500;Xlgt12(FUNC_LOOP);
+  assert(!Light.fade_running && duties[32]==4000 && !duties[33]);
   XdrvMailbox.data_len=1;XdrvMailbox.payload=1;
   Xlgt12(FUNC_COMMAND);
-  assert(Settings->lamp_night==1 && duties[31]==4000 && !duties[32]);
-  assert(TasmotaGlobal.save_data_counter==2);
-  CmndLampStatus();
-  channels[0]=channels[1]=0;
+  assert(Settings->lamp_night==1 && light_state.dimmer==5);
   Xlgt12(FUNC_SET_CHANNELS);
-  assert(!duties[31]);
+  assert(!duties[32] && !duties[33]);
+  now+=500;Xlgt12(FUNC_LOOP);
+  assert(duties[31]==200);
+  assert(TasmotaGlobal.save_data_counter==2);
+  light_state.dimmer=17;Xlgt12(FUNC_SET_CHANNELS);
+  now+=500;Xlgt12(FUNC_LOOP);assert(duties[31]==680);
+  XdrvMailbox.payload=0;CmndLampNight();
+  assert(light_state.dimmer==100 && Settings->lamp_night_dimmer==17);
+  Xlgt12(FUNC_SET_CHANNELS);now+=500;Xlgt12(FUNC_LOOP);
+  assert(duties[32]==4000 && !duties[31]);
+  CmndLampStatus();
+  Light.power=false;Xlgt12(FUNC_SET_CHANNELS);
+  now+=500;Xlgt12(FUNC_LOOP);assert(!duties[32]);
+  assert(Settings->lamp_day_dimmer==100);
   webarg="0";Xlgt12(FUNC_WEB_GET_ARG);assert(webcommand=="LampNight 0");
   webarg="1";Xlgt12(FUNC_WEB_GET_ARG);assert(webcommand=="LampNight 1");
-  channels[0]=512;Xlgt12(FUNC_SET_CHANNELS);
-  Xlgt12(FUNC_ABOUT_TO_RESTART);assert(!duties[31]);
-  fail_write=true;channels[0]=1023;
-  Xlgt12(FUNC_SET_CHANNELS);
+  Light.power=true;Xlgt12(FUNC_SET_CHANNELS);
+  Xlgt12(FUNC_ABOUT_TO_RESTART);assert(!duties[32]);
+  fail_write=true;Xlgt12(FUNC_SET_CHANNELS);
   assert(!YlxdReady && !duties[31] && !duties[32] && !duties[33]);
-  puts("Production lamp driver dispatch, migration, channel order, mode handover, web commands, restart and failure passed");
+  puts("Production lamp driver: migration, fades, group brightness, power, restart and failure passed");
 }

@@ -1924,6 +1924,22 @@ void LightAnimate(void)
     // Apply power modifiers to Light.new_color
     LightApplyPower(Light.new_color, Light.power);
 
+#ifdef USE_YLXD01YL_LIGHT
+    if (TasmotaGlobal.light_driver == 12) {
+      // The native lamp converts a target once and fades calibrated hardware
+      // duties. Do not feed it Tasmota's already-faded/gamma-corrected frame.
+      if (Light.update || memcmp(Light.last_color,Light.new_color,Light.subtype)) {
+        memcpy(Light.last_color,Light.new_color,sizeof(Light.last_color));
+        Light.update=false;
+        XlgtCall(FUNC_SET_CHANNELS);
+      }
+      if (Light.fade_running && TasmotaGlobal.sleep > PWM_MAX_SLEEP) {
+        sleep_previous=TasmotaGlobal.sleep;
+        TasmotaGlobal.sleep=PWM_MAX_SLEEP;
+      }
+      return;
+    }
+#endif
     // AddLog(LOG_LEVEL_INFO, PSTR("last_color (%02X%02X%02X%02X%02X) new_color (%02X%02X%02X%02X%02X) power %d"),
     // Light.last_color[0], Light.last_color[1], Light.last_color[2], Light.last_color[3], Light.last_color[4],
     // Light.new_color[0], Light.new_color[1], Light.new_color[2], Light.new_color[3], Light.new_color[4],
@@ -3145,6 +3161,14 @@ void CmndDimmerStep(void)
 
 void CmndLedTable(void)
 {
+#ifdef USE_YLXD01YL_LIGHT
+  if (TasmotaGlobal.light_driver == 12) {
+    // This calibrated driver owns its brightness transfer function.
+    Settings->light_correction=0;
+    ResponseCmndStateText(0);
+    return;
+  }
+#endif
   // LedTable        - Show current LedTable state
   // LedTable 0      - Turn LedTable Off
   // LedTable On     - Turn LedTable On
@@ -3464,6 +3488,12 @@ bool Xdrv04(uint32_t function)
         result = XlgtCall(FUNC_SERIAL);
         break;
       case FUNC_LOOP:
+#ifdef USE_YLXD01YL_LIGHT
+        if (TasmotaGlobal.light_driver == 12) {
+          XlgtCall(FUNC_LOOP);
+          break;
+        }
+#endif
         if (Light.fade_running) {
           if (LightApplyFade()) {
             LightSetOutputs(Light.fade_cur_10);

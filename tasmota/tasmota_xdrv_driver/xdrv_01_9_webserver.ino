@@ -4400,6 +4400,9 @@ const char kWebCmndStatus[] PROGMEM = D_JSON_DONE "|" D_JSON_WRONG_PARAMETERS "|
 ;
 
 const char kWebCommands[] PROGMEM = "|"  // No prefix
+#ifdef TASMOTA_PLATFORM_MT7697N
+  "WebStatus|"
+#endif
   D_CMND_WEBLOG "|"
   D_CMND_WEBTIME "|"
 #ifdef USE_EMULATION
@@ -4422,6 +4425,9 @@ const char kWebCommands[] PROGMEM = "|"  // No prefix
 ;
 
 void (* const WebCommand[])(void) PROGMEM = {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  &CmndWebStatus,
+#endif
   &CmndWeblog,
   &CmndWebTime,
 #ifdef USE_EMULATION
@@ -4445,6 +4451,16 @@ void (* const WebCommand[])(void) PROGMEM = {
 
 /*********************************************************************************************/
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+void CmndWebStatus(void) {
+  const auto& s=NativeWebStatistics();
+  Response_P(PSTR("{\"WebStatus\":{\"Accepted\":%u,\"Completed\":%u,\"SendWaits\":%u,"
+      "\"SendErrors\":%u,\"CloseErrors\":%u,\"Timeouts\":%u,\"QueueFailures\":%u,"
+      "\"PeakQueued\":%u,\"LastSendError\":%d,\"LastCloseError\":%d,\"LastWaitError\":%d}}"),
+      s.accepted,s.completed,s.send_waits,s.send_errors,s.close_errors,s.timeouts,
+      s.queue_failures,s.peak_queued,s.last_send_error,s.last_close_error,s.last_wait_error);
+}
+#endif
 void CmndWebTime(void) {
   // 2017-03-07T11:08:02-07:00
   // 0123456789012345678901234

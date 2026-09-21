@@ -4,16 +4,33 @@
 #include <IPAddress.h>
 enum HTTPMethod { HTTP_ANY, HTTP_GET, HTTP_HEAD, HTTP_POST, HTTP_OPTIONS };
 constexpr size_t CONTENT_LENGTH_UNKNOWN = size_t(-1);
+struct NativeWebStats {
+  uint32_t accepted=0,completed=0,send_waits=0,send_errors=0,close_errors=0;
+  uint32_t timeouts=0,queue_failures=0,peak_queued=0;
+  int last_send_error=0,last_close_error=0,last_wait_error=0;
+};
+const NativeWebStats& NativeWebStatistics();
 
 class NativeWebClient {
  public:
   size_t write(const char* data, size_t size);
   size_t write(const uint8_t* data, size_t size) { return write(reinterpret_cast<const char*>(data), size); }
   void stop();
-  void flush() {} // Writes are completed by write(); no buffered output.
+  void flush() {} // Queued output drains through handleClient(), without blocking.
   IPAddress remoteIP() const { return peer_; }
  private:
   friend class TasmotaWebServer;
+  struct Block { Block* next; size_t size; char data[1024]; };
+  void clear();
+  void abortResponse();
+  void pump();
+  void release();
+  Block* head_=nullptr;
+  Block* tail_=nullptr;
+  size_t offset_=0,queued_=0;
+  uint32_t progress_=0;
+  bool finishing_=false,closing_=false,failed_=false;
+  size_t failure_offset_=0;
   int socket_ = -1;
   IPAddress peer_;
 };
@@ -26,7 +43,7 @@ class TasmotaWebServer {
   void collectHeaders(const char**, size_t) {} // All headers are collected.
   void begin();
   void close();
-  bool listening() const { return listener_ >= 0; }
+  bool listening() const { return listener_ready_; }
   void handleClient();
   NativeWebClient& client() { return client_; }
   String arg(const String& name) const;
@@ -52,6 +69,10 @@ class TasmotaWebServer {
   bool parse();
   bool parseArgs(const char* text);
   void reset();
+  void openListener();
+  void releaseListener();
+  bool wanted_=false,listener_ready_=false;
+  uint32_t last_open_=0;
   int port_, listener_ = -1;
   NativeWebClient client_;
   Route routes_[32];

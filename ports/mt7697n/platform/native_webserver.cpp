@@ -8,6 +8,13 @@ extern "C" {
 }
 
 namespace {
+NativeWebStats statistics;
+bool temporary(int error) {
+  return error==EAGAIN || error==EWOULDBLOCK || error==ENOMEM ||
+         error==ENOBUFS || error==EINTR;
+}
+const char unavailable[]="HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n"
+                        "Content-Length: 0\r\n\r\n";
 bool nonblock(int fd) {
   unsigned long enabled = 1;
   return lwip_ioctl(fd, FIONBIO, &enabled) == 0;
@@ -33,21 +40,85 @@ bool decode(const char* p, size_t length, String& out) {
   return true;
 }
 }
+const NativeWebStats& NativeWebStatistics() { return statistics; }
+
 size_t NativeWebClient::write(const char* data, size_t size) {
-  size_t sent=0;
-  const uint32_t start=millis();
-  while (socket_>=0 && sent<size && uint32_t(millis()-start)<5000) {
-    int n=lwip_send(socket_,data+sent,size-sent,0);
-    if (n>0) sent+=n;
-    else if (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK) { stop(); break; }
-    else delay(1);
+  if (socket_<0 || failed_ || finishing_) return 0;
+  // Stage the complete response before transmission: allocation/size failures
+  // produce a complete 503, never a header followed by truncated HTML.
+  if (size>32768-queued_) { clear();failed_=true;++statistics.queue_failures;return 0; }
+  size_t copied=0;
+  while (copied<size) {
+    if (!tail_ || tail_->size==sizeof(tail_->data)) {
+      auto* block=static_cast<Block*>(malloc(sizeof(Block)));
+      if (!block) { clear();failed_=true;++statistics.queue_failures;return 0; }
+      block->next=nullptr;block->size=0;
+      if (tail_) tail_->next=block;else head_=block;
+      tail_=block;
+    }
+    size_t n=sizeof(tail_->data)-tail_->size;
+    if (n>size-copied) n=size-copied;
+    memcpy(tail_->data+tail_->size,data+copied,n);
+    tail_->size+=n;queued_+=n;copied+=n;
   }
-  if (sent!=size) stop();
-  return sent;
+  if (queued_>statistics.peak_queued) statistics.peak_queued=queued_;
+  return copied;
 }
 void NativeWebClient::stop() {
-  if (socket_>=0) lwip_close(socket_);
-  socket_=-1;
+  // Tasmota calls stop() at the end of a generated response. Preserve queued
+  // bytes until accepted by TCP; closing a response is not an abort.
+  if (socket_>=0 && !finishing_) { finishing_=true;progress_=millis(); }
+}
+void NativeWebClient::clear() {
+  while (head_) { Block* next=head_->next;free(head_);head_=next; }
+  tail_=nullptr;offset_=queued_=0;
+}
+void NativeWebClient::abortResponse() {
+  clear();finishing_=closing_=true;failed_=false;
+}
+void NativeWebClient::release() {
+  if (socket_>=0 && lwip_close(socket_)<0 && errno!=EBADF) {
+    ++statistics.close_errors;statistics.last_close_error=errno;
+    // SDK leaves a failed-close descriptor allocated. Retain ownership and
+    // retry on a later main-loop pass rather than leaking it.
+    return;
+  }
+  socket_=-1;finishing_=closing_=failed_=false;failure_offset_=0;
+}
+void NativeWebClient::pump() {
+  if (socket_<0 || !finishing_) return;
+  if (!closing_ && uint32_t(millis()-progress_)>=5000) {
+    ++statistics.timeouts;abortResponse();
+  }
+  unsigned budget=4096;
+  while (!closing_ && budget && (head_ || failed_)) {
+    const char* data=failed_?unavailable+failure_offset_:head_->data+offset_;
+    size_t size=failed_?sizeof(unavailable)-1-failure_offset_:head_->size-offset_;
+    if (size>budget) size=budget;
+    int n=lwip_send(socket_,data,size,0);
+    if (n>0) {
+      progress_=millis();budget-=n;
+      if (failed_) {
+        failure_offset_+=n;
+        if (failure_offset_==sizeof(unavailable)-1) { failed_=false;break; }
+      } else {
+        offset_+=n;queued_-=n;
+        if (offset_==head_->size) {
+          Block* next=head_->next;free(head_);head_=next;offset_=0;
+          if (!head_) tail_=nullptr;
+        }
+      }
+    } else {
+      const int error=n<0?errno:0;
+      if (!n || temporary(error)) {
+        ++statistics.send_waits;statistics.last_wait_error=error;break;
+      }
+      ++statistics.send_errors;statistics.last_send_error=error;
+      abortResponse();
+    }
+  }
+  if (!closing_ && !head_ && !failed_) { closing_=true;++statistics.completed; }
+  if (closing_) release();
 }
 void TasmotaWebServer::on(const char* uri, HTTPMethod method, void (*handler)()) {
   if (route_count_ == 32) abort(); // Programming error, never silently omit routes.
@@ -55,18 +126,31 @@ void TasmotaWebServer::on(const char* uri, HTTPMethod method, void (*handler)())
 }
 void TasmotaWebServer::begin() {
   close();
+  wanted_=true;
+  openListener();
+}
+void TasmotaWebServer::openListener() {
+  if (listener_>=0 || client_.socket_>=0) return;
+  last_open_=millis();
   listener_=lwip_socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
   if (listener_<0) return;
   sockaddr_in address={};
   address.sin_family=AF_INET; address.sin_port=lwip_htons(port_);
   int reuse=1; lwip_setsockopt(listener_,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
   if (!nonblock(listener_) || lwip_bind(listener_,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0 ||
-      lwip_listen(listener_,1)<0) close();
+      lwip_listen(listener_,1)<0) { releaseListener();return; }
+  listener_ready_=true;
 }
 void TasmotaWebServer::close() {
-  client_.stop();
-  if (listener_>=0) lwip_close(listener_);
-  listener_=-1;
+  wanted_=listener_ready_=false;
+  client_.abortResponse();client_.release();
+  releaseListener();
+}
+void TasmotaWebServer::releaseListener() {
+  if (listener_>=0) {
+    if (lwip_close(listener_)==0 || errno==EBADF) listener_=-1;
+    else { ++statistics.close_errors;statistics.last_close_error=errno; }
+  }
 }
 void TasmotaWebServer::reset() {
   for (unsigned i=0;i<arg_count_;++i) arguments_[i]={};
@@ -122,13 +206,19 @@ bool TasmotaWebServer::parse() {
   return true;
 }
 void TasmotaWebServer::handleClient() {
-  if (listener_<0) return;
+  if (client_.finishing_) { client_.pump();return; }
+  if (!listener_ready_) {
+    releaseListener();
+    if (wanted_ && uint32_t(millis()-last_open_)>=1000) openListener();
+    return;
+  }
   if (client_.socket_<0) {
     sockaddr_in peer={};socklen_t length=sizeof(peer);
     int fd=lwip_accept(listener_,reinterpret_cast<sockaddr*>(&peer),&length);
     if (fd<0) return;
-    if (!nonblock(fd)) { lwip_close(fd);return; }
     reset();client_.socket_=fd;client_.peer_=IPAddress(peer.sin_addr.s_addr);started_=millis();
+    ++statistics.accepted;
+    if (!nonblock(fd)) {client_.abortResponse();return;}
   }
   if (uint32_t(millis()-started_)>5000 || received_==sizeof(request_)-1) {client_.stop();return;}
   int n=lwip_recv(client_.socket_,request_+received_,sizeof(request_)-1-received_,MSG_DONTWAIT);

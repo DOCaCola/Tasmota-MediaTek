@@ -1,3 +1,5 @@
+#include "../ylxd01yl_fade.h"
+#include "stock_fade_vectors.h"
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <stdint.h>
 #include <stddef.h>
@@ -90,6 +92,12 @@ extern "C" int run_tests() {
   tick += 125;
   if (variant_gettimeofday(&got, nullptr) || got.tv_sec != -1 || got.tv_usec != 875000) {
     return 12;
+  }
+  for (const auto& v:stock_fades) {
+    if (!ylxd01yl::equal(ylxd01yl::transition(v.start,v.end,v.k,v.n,v.previous,v.night,v.cubic),v.result)) return 20;
+  }
+  for (const auto& v:stock_targets) {
+    if (!ylxd01yl::equal(ylxd01yl::target(v.kelvin,v.percent,false),v.result)) return 21;
   }
   return 0;
 }
