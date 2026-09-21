@@ -12,14 +12,27 @@ output driver. Generic GPIO/PWM reassignment remains disabled.
 - Mode is stored in the native settings block (schema at 0x404, mode at
   0x405); total settings length and following offsets are unchanged.
 - The first lighting-capable boot sets power off, PowerOnState 0, daylight,
-  and Dimmer 10. Later boots respect the configured power-on policy.
+  and Dimmer 10. Native cold-boot reset classification is still incomplete:
+  unknown resets currently take Tasmota's saved-state restart path. Do not
+  assume PowerOnState 0 is enforced on every subsequent power cycle.
 - SetOption37/68/92 cannot enable channel remapping, independent dimmers or
   brightness/CT signal mode: those do not represent this board.
 
-Cold/warm frames use the recovered eleven-point stock calibration table
-with bounded piecewise-linear interpolation. Tasmota applies its brightness
-curve once; this is not an exact reproduction of stock interpolation or its
-minimum-brightness curve. Intermediate fade frames determine temperature.
+Cold/warm frames use the stock eleven-point table, three-point Lagrange
+interpolation, endpoint plateaus, and per-channel minimum-duty correction.
+For a nonzero channel, duty is `4000*(0.08+0.92*coefficient*brightness)`;
+zero remains off. Coefficient and brightness are fractions. The implementation
+preserves the stock floating-point evaluation and rounding. Cortex-M4 and host
+results match all 383901 integer Kelvin/percent combinations against execution
+of stock 1.5.9_0189 ARM instructions. Night output is linear, without that floor.
+
+Schema 2 migration disables LedTable to use linear requested brightness,
+matching stock's default. Users may explicitly enable gamma again. Tasmota's
+10-bit frame quantization and mired representation remain; comparison of the
+converter itself does not imply identical UI-to-output behavior.
+Tasmota still owns Fade/Speed and intermediate virtual channel frames; its
+transition timing/curve is not a clone of stock's duty-space transition engine.
+See `RnD/stock-light-algorithm.md` in the investigation workspace.
 Combined daylight duty never exceeds 4000/4000; night and daylight never
 overlap. These software limits do not replace electrical verification.
 
@@ -28,6 +41,10 @@ Raw GPIO31/PWM32 is warm, GPIO32/PWM33 cold, GPIO30/PWM31 night, mux9,
 Partial startup/update failure stops all three outputs. Restart requests
 turn outputs off before reboot. HAL errors are logged and `LampReady` becomes
 false; further output is disabled until reboot.
+Duty updates check hardware running status and restart idle channels, as stock
+does. `LampStatus` reads back duty, frequency and running flags in warm/cold/night
+order, alongside the requested target and cold/warm virtual frame. Readback
+describes PWM hardware; it does not measure emitted light.
 
 Tests run through `tests/run.py`: calibration anchors, full-domain bounds
 and monotonicity, actual driver dispatch with simulated HAL, mode handover,

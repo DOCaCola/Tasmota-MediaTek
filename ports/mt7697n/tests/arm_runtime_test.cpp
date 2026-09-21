@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <sys/time.h>
+#include "../ylxd01yl_light.h"
+#include "stock_light_vectors.h"
 #include "../../../lib/default/Ext-printf/src/ext_printf.h"
 #include "../../../lib/default/Ext-printf/src/arm_va.h"
 
@@ -39,6 +41,13 @@ __attribute__((noinline)) static bool arguments(unsigned count, ...) {
 }
 
 extern "C" int run_tests() {
+  for (const auto& p : stock_vectors) {
+    const auto d=ylxd01yl::daylightFraction(p.kelvin,p.percent/100.0f);
+    if (d.warm!=p.warm || d.cold!=p.cold) return 13;
+  }
+  for (unsigned b=0;b<=100;++b) {
+    if (ylxd01yl::nightFraction(b/100.0f)!=b*40) return 14;
+  }
   // Check register-save and stack slots, including replay of rewritten args.
   if (!arguments(12, 1,2,3,4,5,6,7,8,9,10,11,12)) { return 1; }
   char buffer[256];

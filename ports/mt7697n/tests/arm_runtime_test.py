@@ -63,4 +63,4 @@ cpu.emu_start(entry | 1, 0x100ffff0, count=5000000)
 result = cpu.reg_read(UC_ARM_REG_R0)
 assert cpu.reg_read(UC_ARM_REG_PC) == 0x100ffff0, "ARM instruction budget exhausted"
 assert result == 0, f"ARM runtime test case {result} failed"
-print("ARM runtime passed: varargs register/stack rewriting, formatter, SDK libc, wall clock")
+print("ARM runtime passed: stock lamp vectors, varargs register/stack rewriting, formatter, SDK libc, wall clock")

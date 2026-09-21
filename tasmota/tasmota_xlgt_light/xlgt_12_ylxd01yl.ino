@@ -22,19 +22,32 @@ bool YlxdApply(void) {
 void CmndLampNight(void) {
   if (XdrvMailbox.data_len && XdrvMailbox.payload >= 0 && XdrvMailbox.payload <= 1) {
     Settings->lamp_night = XdrvMailbox.payload;
+    if (Settings->save_data) TasmotaGlobal.save_data_counter = 2;
     YlxdApply(); // Backend decreases the old group before enabling the new.
   }
   Response_P(PSTR("{\"LampNight\":%d,\"LampReady\":%s}"),
              Settings->lamp_night, YlxdReady ? "true" : "false");
 }
-const char kYlxdCommands[] PROGMEM = "Lamp|Night";
-void (* const YlxdCommands[])(void) PROGMEM = { &CmndLampNight };
+void CmndLampStatus(void) {
+  ylxd01yl::PwmStatus state;
+  const bool ok = YlxdPwm.status(state);
+  const auto target = ylxd01yl::frame(YlxdFrame[0],YlxdFrame[1],Settings->lamp_night);
+  Response_P(PSTR("{\"LampStatus\":{\"Night\":%d,\"Ready\":%s,\"Readback\":%s,"
+                   "\"Frame\":[%u,%u],\"Target\":[%u,%u,%u],"
+                   "\"Duty\":[%u,%u,%u],\"Hz\":[%u,%u,%u],\"Running\":[%u,%u,%u]}}"),
+      Settings->lamp_night,YlxdReady?"true":"false",ok?"true":"false",
+      YlxdFrame[0],YlxdFrame[1],target.warm,target.cold,target.night,
+      state.duty[0],state.duty[1],state.duty[2],
+      state.frequency[0],state.frequency[1],state.frequency[2],
+      state.running[0],state.running[1],state.running[2]);
+}
+const char kYlxdCommands[] PROGMEM = "Lamp|Night|Status";
+void (* const YlxdCommands[])(void) PROGMEM = { &CmndLampNight, &CmndLampStatus };
 
 bool Xlgt12(uint32_t function) {
   switch (function) {
     case FUNC_MODULE_INIT:
-      if (Settings->lamp_config_version != 1) {
-        Settings->lamp_config_version = 1;
+      if (Settings->lamp_config_version == 0) {
         Settings->lamp_night = 0;
         // First lighting-capable boot must not restore the network-only
         // build's synthetic relay power bit as full lamp brightness.
@@ -43,6 +56,12 @@ bool Xlgt12(uint32_t function) {
         Settings->light_dimmer = 10;
         memset(Settings->light_color,0,sizeof(Settings->light_color));
         Settings->light_color[3] = 255; // Cold white, normal CCT mode.
+      }
+      if (Settings->lamp_config_version < 2) {
+        // Stock uses linear requested brightness for both groups. In particular,
+        // gamma correction can quantize low night brightness to a zero frame.
+        Settings->light_correction = 0;
+        Settings->lamp_config_version = 2;
       }
       Settings->lamp_night = Settings->lamp_night == 1;
       Settings->flag3.pwm_multi_channels = false;

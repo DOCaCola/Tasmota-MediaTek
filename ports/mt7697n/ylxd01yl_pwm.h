@@ -5,6 +5,10 @@
 namespace ylxd01yl {
 constexpr uint32_t kFrequencyHz = 10000;
 constexpr uint32_t kPeriodCounts = 4000;
+struct PwmStatus {
+  uint32_t duty[3] = {}, frequency[3] = {};
+  bool running[3] = {};
+};
 
 // Counts are calibrated hardware duties, not brightness or color temperature.
 // The caller must apply the stock calibration before using this backend.
@@ -14,6 +18,7 @@ class Pwm {
   bool daylight(uint32_t warm, uint32_t cold);
   bool night(uint32_t duty);
   bool off();
+  bool status(PwmStatus& result) const;
 
  private:
   bool apply(uint32_t warm, uint32_t cold, uint32_t night);

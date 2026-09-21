@@ -14,6 +14,8 @@ enum {FUNC_MODULE_INIT,FUNC_PRE_INIT,FUNC_SET_CHANNELS,FUNC_COMMAND,
 enum {LOG_LEVEL_INFO,LOG_LEVEL_ERROR,LT_CW=10,P_RGB_REMAP=0};
 struct Config {
   uint8_t lamp_config_version=0,lamp_night=0,light_dimmer=100,poweronstate=3;
+  uint8_t light_correction=1;
+  unsigned save_data=300;
   unsigned power=1;
   uint8_t light_color[5]={255,255,255,255,255};
   uint8_t param[1]={};
@@ -21,7 +23,7 @@ struct Config {
   struct { bool pwm_ct_mode=false; } flag4;
 } config;
 Config* Settings=&config;
-struct {unsigned light_type=0,light_driver=0;} TasmotaGlobal;
+struct {unsigned light_type=0,light_driver=0,save_data_counter=300;} TasmotaGlobal;
 struct {int data_len=0,payload=-1;char* command=nullptr;} XdrvMailbox;
 template<class... T> void AddLog(T...) {}
 template<class... T> void Response_P(T...) {}
@@ -56,12 +58,22 @@ hal_pwm_status_t hal_pwm_set_duty_cycle(hal_pwm_channel_t c,uint32_t value) {
 hal_pinmux_status_t hal_pinmux_set_function(hal_gpio_pin_t,uint8_t) {return HAL_PINMUX_STATUS_OK;}
 hal_pwm_status_t hal_pwm_start(hal_pwm_channel_t) {return HAL_PWM_STATUS_OK;}
 hal_pwm_status_t hal_pwm_stop(hal_pwm_channel_t) {return HAL_PWM_STATUS_OK;}
+hal_pwm_status_t hal_pwm_get_running_status(hal_pwm_channel_t, hal_pwm_running_status_t* s) {
+  *s=HAL_PWM_BUSY;return HAL_PWM_STATUS_OK;
+}
+hal_pwm_status_t hal_pwm_get_frequency(hal_pwm_channel_t,uint32_t* hz) {
+  *hz=10000;return HAL_PWM_STATUS_OK;
+}
+hal_pwm_status_t hal_pwm_get_duty_cycle(hal_pwm_channel_t c,uint32_t* duty) {
+  *duty=duties[c];return HAL_PWM_STATUS_OK;
+}
 }
 #include "../../../tasmota/tasmota_xlgt_light/xlgt_12_ylxd01yl.ino"
 int main() {
   assert(Xlgt12(FUNC_MODULE_INIT));
   assert(TasmotaGlobal.light_type==LT_CW && YlxdReady);
   assert(!Settings->power && !Settings->poweronstate && Settings->light_dimmer==10);
+  assert(Settings->lamp_config_version==2 && !Settings->light_correction);
   assert(Xlgt12(FUNC_PRE_INIT) && ct_min==153 && ct_max==370);
   uint16_t channels[2]={1023,0};
   XdrvMailbox.command=reinterpret_cast<char*>(channels);
@@ -72,6 +84,8 @@ int main() {
   XdrvMailbox.data_len=1;XdrvMailbox.payload=1;
   Xlgt12(FUNC_COMMAND);
   assert(Settings->lamp_night==1 && duties[31]==4000 && !duties[32]);
+  assert(TasmotaGlobal.save_data_counter==2);
+  CmndLampStatus();
   channels[0]=channels[1]=0;
   Xlgt12(FUNC_SET_CHANNELS);
   assert(!duties[31]);

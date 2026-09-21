@@ -58,6 +58,25 @@ bool Pwm::apply(uint32_t warm, uint32_t cold, uint32_t night) {
       }
     }
   }
+  // Stock checks running status after duty updates. Starting at zero during
+  // initialization is not sufficient evidence that later outputs are active.
+  for (unsigned i = 0; i < 3; ++i) {
+    hal_pwm_running_status_t state;
+    if (hal_pwm_get_running_status(channels[i], &state) != HAL_PWM_STATUS_OK ||
+        (state == HAL_PWM_IDLE &&
+         hal_pwm_start(channels[i]) != HAL_PWM_STATUS_OK)) return shutdown();
+  }
+  return true;
+}
+
+bool Pwm::status(PwmStatus& result) const {
+  for (unsigned i = 0; i < 3; ++i) {
+    hal_pwm_running_status_t state;
+    if (hal_pwm_get_duty_cycle(channels[i], &result.duty[i]) != HAL_PWM_STATUS_OK ||
+        hal_pwm_get_frequency(channels[i], &result.frequency[i]) != HAL_PWM_STATUS_OK ||
+        hal_pwm_get_running_status(channels[i], &state) != HAL_PWM_STATUS_OK) return false;
+    result.running[i] = state != HAL_PWM_IDLE;
+  }
   return true;
 }
 
