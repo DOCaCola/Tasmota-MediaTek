@@ -29,9 +29,12 @@ const uint32_t MINS_PER_HOUR = 60UL;
 
 #define LEAP_YEAR(Y)  (((1970+Y)>0) && !((1970+Y)%4) && (((1970+Y)%100) || !((1970+Y)%400)))
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#include <platform/ntp.h>
+#else
 #include <Ticker.h>
-
 Ticker TickerRtc;
+#endif
 
 static const uint8_t kDaysInMonth[] PROGMEM = { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }; // API starts months from 1, this array starts from 0
 static const char kMonthNamesEnglish[] PROGMEM = "JanFebMarAprMayJunJulAugSepOctNovDec";
@@ -254,7 +257,11 @@ uint32_t MinutesPastMidnight(void) {
 }
 
 uint32_t RtcMillis(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  return (Rtc.nanos / 1000000U + millis() - Rtc.millis) % 1000;
+#else
   return (millis() - Rtc.millis) % 1000;
+#endif
 }
 
 void BreakNanoTime(uint32_t time_input, uint32_t time_nanos, TIME_T &tm) {
@@ -450,6 +457,10 @@ void RtcSecond(void) {
       TasmotaGlobal.rules_flag.time_set = 1;
     }
   } else {
+#ifdef TASMOTA_PLATFORM_MT7697N
+    mt7697::rtc_advance(millis() - Rtc.millis, Rtc.utc_time, Rtc.nanos);
+    Rtc.last_synced = false;
+#else
     if (Rtc.last_synced) {
       Rtc.last_synced = false;
       uint32_t nanos = Rtc.nanos + (millis() - Rtc.millis) * 1000000U;
@@ -457,6 +468,7 @@ void RtcSecond(void) {
       Rtc.nanos = nanos % 1000000000U;
     } else
       Rtc.utc_time++;  // Increment every second
+#endif
   }
   Rtc.millis = millis();
 
@@ -512,6 +524,9 @@ void RtcSetTime(uint32_t epoch) {
     Rtc.user_time_entry = true;
 //    Rtc.utc_time = epoch -1;    // Will be corrected by RtcSecond
     Rtc.utc_time = epoch;
+#ifdef TASMOTA_PLATFORM_MT7697N
+    Rtc.nanos = 0;
+#endif
     RtcSync("Time");
   }
 }
@@ -519,7 +534,9 @@ void RtcSetTime(uint32_t epoch) {
 void RtcInit(void) {
   Rtc.utc_time = 0;
   BreakTime(Rtc.utc_time, RtcTime);
+#ifndef TASMOTA_PLATFORM_MT7697N
   TickerRtc.attach(1, RtcSecond);
+#endif
 
   if (Settings->cfg_timestamp > START_VALID_TIME) {
     // Fix file timestamp while utctime is not synced
@@ -538,3 +555,9 @@ void RtcInit(void) {
 void RtcPreInit(void) {
   Rtc.millis = millis();
 }
+
+#ifdef TASMOTA_PLATFORM_MT7697N
+void NativeRtcPoll(void) {
+  if (uint32_t(millis() - Rtc.millis) >= 1000) { RtcSecond(); }
+}
+#endif

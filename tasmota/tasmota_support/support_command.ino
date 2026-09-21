@@ -120,6 +120,7 @@ const char kWifiConfig[] PROGMEM =
 /********************************************************************************************/
 
 #ifndef FIRMWARE_MINIMAL
+#ifndef TASMOTA_PLATFORM_MT7697N
 void CmndWifiScan(void)
 {
   if (XdrvMailbox.data_len > 0) {
@@ -178,6 +179,7 @@ void CmndWifiScan(void)
     }
   }
 }
+#endif
 
 void CmndWifiTest(void)
 {
@@ -1134,9 +1136,13 @@ void CmndStatus(void)
 
 #endif // USE_IPV6
 #endif  // USE_ETHERNET
+#ifdef TASMOTA_PLATFORM_MT7697N
+    ResponseAppend_P(PSTR(",\"WifiConfig\":%d,\"WifiPower\":null}}"), Settings->sta_config);
+#else
     float wifi_tx_power = WifiGetOutputPower();
     ResponseAppend_P(PSTR(",\"" D_CMND_WEBSERVER "\":%d,\"HTTP_API\":%d,\"" D_CMND_WIFICONFIG "\":%d,\"" D_CMND_WIFIPOWER "\":%1_f}}"),
                           Settings->webserver, Settings->flag5.disable_referer_chk, Settings->sta_config, &wifi_tx_power);
+#endif
     CmndStatusResponse(5);
   }
 
@@ -1340,7 +1346,9 @@ void CmndSleep(void)
   if ((XdrvMailbox.payload >= 0) && (XdrvMailbox.payload < 251)) {
     Settings->sleep = XdrvMailbox.payload;
     TasmotaGlobal.sleep = XdrvMailbox.payload;
+#ifndef TASMOTA_PLATFORM_MT7697N
     WiFiSetSleepMode();
+#endif
   }
   Response_P(S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE, XdrvMailbox.command, Settings->sleep, TasmotaGlobal.sleep);
 
@@ -1778,7 +1786,9 @@ void CmndSetoptionBase(bool indexed) {
                 }
                 break;
               case 10:                     // SetOption60 enable or disable traditional sleep
+#ifndef TASMOTA_PLATFORM_MT7697N
                 WiFiSetSleepMode();        // Update WiFi sleep mode accordingly
+#endif
                 break;
               case 18:                     // SetOption68 for multi-channel PWM, requires a reboot
 #ifdef USE_SERIAL_BRIDGE
@@ -2323,6 +2333,13 @@ void CmndSerialConfig(void)
 }
 
 void CmndSerialBuffer(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (XdrvMailbox.data_len > 0) {
+    ResponseCmndChar(PSTR("Fixed receive buffer on MT7697N"));
+  } else {
+    ResponseCmndNumber(SERIAL_BUFFER_SIZE - 1);
+  }
+#else
   // Allow non-pesistent serial receive buffer size change
   //   between MIN_INPUT_BUFFER_SIZE and MAX_INPUT_BUFFER_SIZE characters
   size_t size = 0;
@@ -2348,6 +2365,7 @@ void CmndSerialBuffer(void) {
   } else {
     ResponseCmndDone();
   }
+#endif
 #endif
 }
 
@@ -2744,6 +2762,17 @@ void CmndTeleperiod(void)
 
 void CmndReset(void)
 {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (XdrvMailbox.payload == 2 || XdrvMailbox.payload == 3 ||
+      XdrvMailbox.payload == 5 || XdrvMailbox.payload == 6) {
+    ResponseCmndChar(PSTR("Flash/SDK erase unsupported; use Reset 1 or Reset 4 for Tasmota settings"));
+    return;
+  }
+  if ((XdrvMailbox.payload == 1 || XdrvMailbox.payload == 4) && !mt7697_settings_writable) {
+    ResponseCmndChar(PSTR("Settings storage is read-only after a load error"));
+    return;
+  }
+#endif
   switch (XdrvMailbox.payload) {
   case 1:
     TasmotaGlobal.restart_flag = 211;
@@ -2991,6 +3020,9 @@ void CmndLedPwmMode(void) {
 }
 
 void CmndWifiPower(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  ResponseCmndChar(PSTR("Unsupported on MT7697N; calibrated radio power retained"));
+#else
   if (XdrvMailbox.data_len > 0) {
     Settings->wifi_output_power = (uint8_t)(CharToFloat(XdrvMailbox.data) * 10);
     if (10 == Settings->wifi_output_power) {
@@ -3003,6 +3035,7 @@ void CmndWifiPower(void) {
     WifiSetOutputPower();
   }
   ResponseCmndFloat(WifiGetOutputPower(), 1);
+#endif
 }
 
 void CmndWifi(void) {
@@ -3041,7 +3074,14 @@ void CmndWifi(void) {
 #ifdef ESP32
         Wifi.phy_mode = option;
 #endif  // ESP32
+#ifdef TASMOTA_PLATFORM_MT7697N
+        if (!WifiSetPhyMode(option)) {
+          ResponseCmndFailed();
+          return;
+        }
+#else
         WiFiHelper::setPhyMode(WiFiPhyMode_t(option));  // 1=B/2=BG/3=BGN/4=BGNAX
+#endif
         break;
       }
   }

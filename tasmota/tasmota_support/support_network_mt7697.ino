@@ -85,4 +85,19 @@ String WifiGetPhyMode(void) {
     default: return String("Unknown");
   }
 }
+
+bool WifiSetPhyMode(uint32_t option) {
+  wifi_phy_mode_t mode;
+  switch (option) {
+    case 1: mode = WIFI_PHY_11B; break;
+    case 2: mode = WIFI_PHY_11BG_MIXED; break;
+    case 3: mode = WIFI_PHY_11BGN_MIXED; break;
+    default: return false;
+  }
+  if (wifi_config_set_wireless_mode(WIFI_PORT_STA, mode) < 0) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Cannot set station PHY mode"));
+    return false;
+  }
+  return true;
+}
 #endif

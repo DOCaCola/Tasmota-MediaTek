@@ -30,6 +30,11 @@ if __name__ == "__main__":
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
+    executable = output / "scan.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(HERE / "network_fakes"), str(HERE / "scan_test.cpp"),
+                    "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
     executable = output / "system.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "system_fakes"), str(HERE / "system_test.cpp"),
@@ -39,6 +44,8 @@ if __name__ == "__main__":
     # only SDK calls are replaced to exercise error paths without hardware.
     # This runs after the Arduino C objects have been generated below.
     cases = {
+        "ntp-service": [HERE / "ntp_service_test.cpp"],
+        "ntp": [HERE / "ntp_test.cpp"],
         "pwm": [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"],
         "platform": [HERE / "platform_test.cpp", PORT / "platform/network.cpp",
                      PORT / "platform/settings.cpp"],

@@ -986,11 +986,14 @@ void SettingsErase(uint8_t type) {
 }
 #endif  // ESP8266
 
+#ifndef TASMOTA_PLATFORM_MT7697N
 void SettingsSdkErase(void) {
   WiFi.disconnect(false);  // Delete SDK wifi config
   SettingsErase(1);
   delay(1000);
 }
+#endif
+
 
 /********************************************************************************************/
 
@@ -1144,7 +1147,9 @@ void SettingsDefaultSet2(void) {
   flag4.network_wifi |= 1;
   flag3.use_wifi_scan |= WIFI_SCAN_AT_RESTART;
   flag3.use_wifi_rescan |= WIFI_SCAN_REGULARLY;
+#ifndef TASMOTA_PLATFORM_MT7697N
   Settings->wifi_output_power = MAX_TX_PWR_DBM_54g;
+#endif  // Native target retains SDK calibration and does not override TX power.
   Settings->dns_timeout = DNS_TIMEOUT;
   Settings->param[P_ARP_GRATUITOUS] = WIFI_ARP_INTERVAL;
   ParseIPv4(&Settings->ipv4_address[0], PSTR(WIFI_IP_ADDRESS));

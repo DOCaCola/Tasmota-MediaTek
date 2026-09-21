@@ -44,6 +44,9 @@
 #include <LWiFi.h>
 #include <WiFiUdp.h>
 #include "platform/system.h"
+extern "C" {
+#include <wifi_api.h>
+}
 #else
 #include <WiFiHelper.h>
 #include <ESP8266HTTPClient.h>              // Ota
@@ -880,6 +883,10 @@ void Scheduler(void) {
 void loop(void) {
   uint32_t my_sleep = millis();
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+  NativeRtcPoll();
+  WifiPollNtp();
+#endif
   Scheduler();
 
   uint32_t my_activity = millis() - my_sleep;

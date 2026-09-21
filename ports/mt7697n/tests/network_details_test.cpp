@@ -10,6 +10,7 @@
 static bool online = true;
 static int api_result = 0, dns_result = 0, dns_calls = 0;
 static uint32_t dns_address;
+static int last_phy = -1;
 struct {
   int status() { return online ? WL_CONNECTED : 0; }
   IPAddress localIP() { return IPAddress(192, 0, 2, 1); }
@@ -35,6 +36,11 @@ int32_t wifi_config_get_channel(uint8_t, uint8_t* channel) {
 int32_t wifi_config_get_wireless_mode(uint8_t, wifi_phy_mode_t* mode) {
   *mode = WIFI_PHY_11BGN_MIXED; return api_result;
 }
+int32_t wifi_config_set_wireless_mode(uint8_t port, wifi_phy_mode_t mode) {
+  assert(port == WIFI_PORT_STA);
+  last_phy = mode;
+  return api_result;
+}
 int netconn_gethostbyname(const char*, ip_addr_t* address) {
   ++dns_calls; address->addr = dns_address; return dns_result;
 }
@@ -45,6 +51,10 @@ int main() {
   assert(WifiBssid() == "02:11:22:33:44:55");
   assert(WifiChannel() == 6);
   assert(WifiGetPhyMode() == "11bgn");
+  assert(WifiSetPhyMode(1) && last_phy == WIFI_PHY_11B);
+  assert(WifiSetPhyMode(2) && last_phy == WIFI_PHY_11BG_MIXED);
+  assert(WifiSetPhyMode(3) && last_phy == WIFI_PHY_11BGN_MIXED);
+  assert(!WifiSetPhyMode(4) && last_phy == WIFI_PHY_11BGN_MIXED);
   assert(IPGetListeningAddressStr() == "192.0.2.1");
   IPAddress result(198, 51, 100, 2);
   const IPAddress original = result;
@@ -68,6 +78,7 @@ int main() {
   assert(result == IPAddress(203, 0, 113, 10));
   assert(IPGetListeningAddressStr() == "");
   api_result = -1;
+  assert(!WifiSetPhyMode(1));
   assert(WifiMacAddress() == "");
   assert(WifiBssid() == "");
   assert(WifiChannel() == -1);

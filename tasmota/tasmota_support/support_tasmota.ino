@@ -1257,7 +1257,12 @@ void PerformEverySecond(void)
   wifiKeepAlive();
 #endif
 
+#ifndef TASMOTA_PLATFORM_MT7697N
   WifiPollNtp();
+#endif
+#ifdef TASMOTA_PLATFORM_MT7697N
+  NativeScanPoll();
+#endif
 
 #ifdef ESP32
   if (11 == TasmotaGlobal.uptime) {  // Perform one-time ESP32 houskeeping
@@ -1320,7 +1325,9 @@ void Every100mSeconds(void)
     }
   }
 
+#ifndef TASMOTA_PLATFORM_MT7697N
   WiFiSetTXpowerBasedOnRssi();
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------*\
@@ -1600,7 +1607,9 @@ void Every250mSeconds(void)
 //        }
         if ((215 == TasmotaGlobal.restart_flag) ||        // Reset 5
             (216 == TasmotaGlobal.restart_flag)) {        // Reset 6
+#ifndef TASMOTA_PLATFORM_MT7697N
           SettingsErase(2);  // Erase all flash from program end to end of physical excluding optional filesystem
+#endif
         }
         SettingsDefault();
         // Restore current SSIDs and Passwords
@@ -1621,6 +1630,7 @@ void Every250mSeconds(void)
 
         TasmotaGlobal.restart_flag = 3;                   // Finish backlog then Restart 1
       }
+#ifndef TASMOTA_PLATFORM_MT7697N
       else if (213 == TasmotaGlobal.restart_flag) {       // Reset 3
         SettingsSdkErase();  // Erase flash SDK parameters
         TasmotaGlobal.restart_flag = 2;                   // Restart 1
@@ -1629,6 +1639,8 @@ void Every250mSeconds(void)
         SettingsErase(0);    // Erase all flash from program end to end of physical flash
         TasmotaGlobal.restart_flag = 211;                 // Reset 1
       }
+
+#endif
 
       if (211 == TasmotaGlobal.restart_flag) {            // Reset 1
         SettingsDefault();

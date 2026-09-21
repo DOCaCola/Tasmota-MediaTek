@@ -150,16 +150,17 @@ functions and native station hooks. This does not compile the full application.
 Current integration: `../../../../RnD/native-core-integration.md`.
 # Full application build status
 
-Native reset/restart, heap/stack/image reporting, identity and station
-metadata/DNS helpers are now implemented. Eight C++ host suites pass. The full
-application still has unported command, settings-reset, NTP, PWM and OTA paths.
-DNS currently uses lwIP's retry timeout rather than the configurable core
-timeout. Crash capture is explicitly unavailable on this target.
+Native system/network reporting, asynchronous scan, PHY selection, settings
+reset boundaries and main-task NTP/RTC services are implemented. Eleven C++
+host suites and four Python sketch tests pass. Radio-power changes and
+ESP-specific erase resets report unsupported. DNS uses the SDK timeout.
 
-`python build.py --application --compiler gcc13-sdk-runtime` now preprocesses
-and compiles the active Tasmota sketch. **This target does not yet compile
-successfully**: native system reporting, remaining Wi-Fi helpers and OTA
-integration are outstanding. Successful probe builds remain probes.
+`python build.py --application --compiler gcc13-sdk-runtime` compiles the
+active Tasmota sketch but **still fails with seven compiler diagnostics** in
+PWM and OTA integration. Remaining library linkage and hardware validation
+are also outstanding. Successful probe builds remain probes; no application
+ELF/BIN is produced by this stage. See
+`../../../../RnD/full-application-build.md` for current evidence and limits.
 
 The application build requires Arduino ctags 5.8-arduino11. Use `--ctags PATH`
 when it is not installed in the standard Windows Arduino15 tools directory.
