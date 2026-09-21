@@ -1,0 +1,226 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+#include "native_webserver.h"
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+extern "C" {
+#include <lwip/sockets.h>
+}
+
+namespace {
+bool nonblock(int fd) {
+  unsigned long enabled = 1;
+  return lwip_ioctl(fd, FIONBIO, &enabled) == 0;
+}
+int hex(char c) {
+  if (c >= '0' && c <= '9') return c-'0';
+  if (c >= 'a' && c <= 'f') return c-'a'+10;
+  if (c >= 'A' && c <= 'F') return c-'A'+10;
+  return -1;
+}
+bool decode(const char* p, size_t length, String& out) {
+  out = "";
+  for (size_t i=0;i<length;++i) {
+    char c=p[i];
+    if (c=='+') c=' ';
+    else if (c=='%') {
+      if (i+2>=length || hex(p[i+1])<0 || hex(p[i+2])<0) return false;
+      c=hex(p[i+1])*16+hex(p[i+2]); i+=2;
+    }
+    if (!c || c=='\r' || c=='\n') return false;
+    if (!out.concat(c)) return false;
+  }
+  return true;
+}
+}
+size_t NativeWebClient::write(const char* data, size_t size) {
+  size_t sent=0;
+  const uint32_t start=millis();
+  while (socket_>=0 && sent<size && uint32_t(millis()-start)<5000) {
+    int n=lwip_send(socket_,data+sent,size-sent,0);
+    if (n>0) sent+=n;
+    else if (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK) { stop(); break; }
+    else delay(1);
+  }
+  if (sent!=size) stop();
+  return sent;
+}
+void NativeWebClient::stop() {
+  if (socket_>=0) lwip_close(socket_);
+  socket_=-1;
+}
+void TasmotaWebServer::on(const char* uri, HTTPMethod method, void (*handler)()) {
+  if (route_count_ == 32) abort(); // Programming error, never silently omit routes.
+  routes_[route_count_++]={String(uri),method,handler};
+}
+void TasmotaWebServer::begin() {
+  close();
+  listener_=lwip_socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);
+  if (listener_<0) return;
+  sockaddr_in address={};
+  address.sin_family=AF_INET; address.sin_port=lwip_htons(port_);
+  int reuse=1; lwip_setsockopt(listener_,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
+  if (!nonblock(listener_) || lwip_bind(listener_,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0 ||
+      lwip_listen(listener_,1)<0) close();
+}
+void TasmotaWebServer::close() {
+  client_.stop();
+  if (listener_>=0) lwip_close(listener_);
+  listener_=-1;
+}
+void TasmotaWebServer::reset() {
+  for (unsigned i=0;i<arg_count_;++i) arguments_[i]={};
+  for (unsigned i=0;i<header_count_;++i) headers_[i]={};
+  arg_count_=header_count_=0;
+  received_=expected_=content_length_=0;
+  request_[0]=0; uri_="";response_headers_="";chunked_=false;method_=HTTP_ANY;
+}
+bool TasmotaWebServer::parseArgs(const char* p) {
+  while (*p) {
+    const char* end=strchr(p,'&'); if (!end) end=p+strlen(p);
+    const char* eq=static_cast<const char*>(memchr(p,'=',end-p));
+    if (arg_count_==64) return false;
+    Pair& a=arguments_[arg_count_];
+    a={};
+    if (!decode(p,(eq ? eq:end)-p,a.name) || !a.name.length()) return false;
+    if (hasArg(a.name)) return false;
+    if (eq && !decode(eq+1,end-eq-1,a.value)) return false;
+    ++arg_count_;
+    p=*end ? end+1:end;
+  }
+  return true;
+}
+bool TasmotaWebServer::parse() {
+  char* end=strstr(request_,"\r\n\r\n"); if (!end) return false;
+  char* line=strstr(request_,"\r\n"); *line=0;
+  char* path=strchr(request_,' '); if (!path) return false; *path++=0;
+  char* version=strchr(path,' '); if (!version) return false; *version++=0;
+  if (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) return false;
+  if (!strcmp(request_,"GET")) method_=HTTP_GET;
+  else if (!strcmp(request_,"POST")) method_=HTTP_POST;
+  else if (!strcmp(request_,"HEAD")) method_=HTTP_HEAD;
+  else if (!strcmp(request_,"OPTIONS")) method_=HTTP_OPTIONS;
+  else return false;
+  if (*path!='/') return false;
+  char* query=strchr(path,'?'); if (query) *query++=0;
+  uri_=path;
+  for (char* p=line+2;p<end;) {
+    char* next=strstr(p,"\r\n"); if (!next) return false; *next=0;
+    char* colon=strchr(p,':'); if (!colon || colon==p || header_count_==32) return false;
+    *colon++=0;
+    for (char* q=p;*q;++q) if (!( (*q>='A' && *q<='Z') || (*q>='a' && *q<='z') || *q=='-' || (*q>='0' && *q<='9'))) return false;
+    while (*colon==' ' || *colon=='\t') ++colon;
+    headers_[header_count_++]={String(p),String(colon)};
+    p=next+2;
+  }
+  if (query && !parseArgs(query)) return false;
+  if (method_==HTTP_POST) {
+    String type=header("Content-Type");
+    if (!type.startsWith("application/x-www-form-urlencoded")) return false;
+    if (!parseArgs(end+4)) return false;
+  }
+  return true;
+}
+void TasmotaWebServer::handleClient() {
+  if (listener_<0) return;
+  if (client_.socket_<0) {
+    sockaddr_in peer={};socklen_t length=sizeof(peer);
+    int fd=lwip_accept(listener_,reinterpret_cast<sockaddr*>(&peer),&length);
+    if (fd<0) return;
+    if (!nonblock(fd)) { lwip_close(fd);return; }
+    reset();client_.socket_=fd;client_.peer_=IPAddress(peer.sin_addr.s_addr);started_=millis();
+  }
+  if (uint32_t(millis()-started_)>5000 || received_==sizeof(request_)-1) {client_.stop();return;}
+  int n=lwip_recv(client_.socket_,request_+received_,sizeof(request_)-1-received_,MSG_DONTWAIT);
+  if (n<=0) {
+    if (!n || (errno!=EAGAIN && errno!=EWOULDBLOCK)) client_.stop();
+    return;
+  }
+  if (memchr(request_+received_,0,n)) {client_.stop();return;}
+  received_+=n;request_[received_]=0;
+  if (!expected_) {
+    char* end=strstr(request_,"\r\n\r\n");
+    if (!end) return;
+    size_t body=0; bool length_seen=false;
+    // Determine bounded framing before modifying the request.
+    for (char* p=strstr(request_,"\r\n")+2;p<end;) {
+      char* next=strstr(p,"\r\n"); if (!next) {client_.stop();return;}
+      if (!strncasecmp(p,"Transfer-Encoding:",18)) {client_.stop();return;}
+      if (!strncasecmp(p,"Content-Length:",15)) {
+        if (length_seen) {client_.stop();return;} length_seen=true;
+        char* q=p+15;while (q<next && *q==' ')++q;
+        if (q==next) {client_.stop();return;}
+        for (;q<next;++q) {
+          if (*q<'0' || *q>'9' || body>8192/10) {client_.stop();return;}
+          body=body*10+*q-'0';
+        }
+      }
+      p=next+2;
+    }
+    expected_=end+4-request_+body;
+    if (expected_>=sizeof(request_)) {client_.stop();return;}
+  }
+  if (received_<expected_) return;
+  if (received_!=expected_ || !parse()) {
+    send(400,"text/plain","Invalid or unsupported request");client_.stop();return;
+  }
+  void (*handler)()=missing_;
+  for (unsigned i=0;i<route_count_;++i)
+    if (routes_[i].uri==uri_ && (routes_[i].method==HTTP_ANY || routes_[i].method==method_)) {handler=routes_[i].handler;break;}
+  if (handler) handler(); else send(404,"text/plain","Not found");
+  client_.stop(); // One request per connection; no pipelining.
+}
+String TasmotaWebServer::arg(const String& name) const {
+  for (unsigned i=0;i<arg_count_;++i) if (arguments_[i].name==name) return arguments_[i].value;
+  return String();
+}
+String TasmotaWebServer::arg(unsigned i) const {return i<arg_count_?arguments_[i].value:String();}
+String TasmotaWebServer::argName(unsigned i) const {return i<arg_count_?arguments_[i].name:String();}
+bool TasmotaWebServer::hasArg(const String& name) const {
+  for (unsigned i=0;i<arg_count_;++i) if (arguments_[i].name==name) return true;
+  return false;
+}
+String TasmotaWebServer::header(const String& name) const {
+  for (unsigned i=0;i<header_count_;++i) if (headers_[i].name.equalsIgnoreCase(name)) return headers_[i].value;
+  return String();
+}
+bool TasmotaWebServer::authenticate(const char* user, const char* password) const {
+  String plain=String(user)+":"+password, encoded="Basic ";
+  const char* table="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  for (unsigned i=0;i<plain.length();i+=3) {
+    unsigned remaining=plain.length()-i;
+    uint32_t v=uint8_t(plain[i])<<16;
+    if (remaining>1) v|=uint8_t(plain[i+1])<<8;
+    if (remaining>2) v|=uint8_t(plain[i+2]);
+    encoded+=table[(v>>18)&63];encoded+=table[(v>>12)&63];
+    encoded+=remaining>1?table[(v>>6)&63]:'=';encoded+=remaining>2?table[v&63]:'=';
+  }
+  return header("Authorization")==encoded;
+}
+void TasmotaWebServer::requestAuthentication() {
+  sendHeader("WWW-Authenticate","Basic realm=\"Tasmota\"");
+  send(401,"text/plain","Authentication required");
+}
+void TasmotaWebServer::sendHeader(const String& name,const String& value,bool first) {
+  String h=name+": "+value+"\r\n";
+  if (first) response_headers_=h+response_headers_;else response_headers_+=h;
+}
+void TasmotaWebServer::send(int code,const char* type,const String& body) {
+  chunked_=content_length_==CONTENT_LENGTH_UNKNOWN;
+  String h="HTTP/1.1 "+String(code)+" Response\r\nContent-Type: "+type+"\r\nConnection: close\r\n";
+  if (chunked_) h+="Transfer-Encoding: chunked\r\n";
+  else h+="Content-Length: "+String(static_cast<unsigned long>(content_length_?content_length_:body.length()))+"\r\n";
+  h+=response_headers_+"\r\n";
+  client_.write(h.c_str(),h.length());
+  if (body.length() && method_!=HTTP_HEAD) sendContent(body);
+}
+void TasmotaWebServer::sendContent(const String& body) {
+  sendContent(body.c_str(),body.length());
+}
+void TasmotaWebServer::sendContent(const char* data,size_t length) {
+  if (method_==HTTP_HEAD) return;
+  if (chunked_) {
+    char size[16];snprintf(size,sizeof(size),"%x\r\n",unsigned(length));
+    client_.write(size,strlen(size));client_.write(data,length);client_.write("\r\n",2);
+  } else client_.write(data,length);
+}

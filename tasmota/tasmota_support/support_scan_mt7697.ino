@@ -57,6 +57,30 @@ void NativeScanPoll(void) {
   }
 }
 
+bool NativeScanStart() {
+  NativeScanPoll();
+  if (!wifi_ready() || NativeScan.fault || NativeScan.running) return false;
+    NativeScan.valid = false;
+    NativeScan.complete.store(false, std::memory_order_release);
+    memset(NativeScan.entries, 0, sizeof(NativeScan.entries));
+    if (wifi_connection_register_event_handler(WIFI_EVENT_IOT_SCAN_COMPLETE, NativeScanEvent) < 0) {
+      return false;
+    }
+    NativeScan.registered = true;
+    if (wifi_connection_scan_init(NativeScan.entries, 16) < 0) {
+      NativeScanRelease();
+      return false;
+    }
+    NativeScan.attached = true;
+    if (wifi_connection_start_scan(nullptr, 0, nullptr, 0, 0) < 0) {
+      NativeScanRelease();
+      return false;
+    }
+    NativeScan.started = millis();
+    NativeScan.running = true;
+  return true;
+}
+
 void CmndWifiScan(void) {
   NativeScanPoll();
   if (NativeScan.fault) {
@@ -73,27 +97,7 @@ void CmndWifiScan(void) {
       ResponseCmndChar(PSTR("Station radio is not ready"));
       return;
     }
-    NativeScan.valid = false;
-    NativeScan.complete.store(false, std::memory_order_release);
-    memset(NativeScan.entries, 0, sizeof(NativeScan.entries));
-    if (wifi_connection_register_event_handler(WIFI_EVENT_IOT_SCAN_COMPLETE, NativeScanEvent) < 0) {
-      ResponseCmndFailed();
-      return;
-    }
-    NativeScan.registered = true;
-    if (wifi_connection_scan_init(NativeScan.entries, 16) < 0) {
-      NativeScanRelease();
-      ResponseCmndFailed();
-      return;
-    }
-    NativeScan.attached = true;
-    if (wifi_connection_start_scan(nullptr, 0, nullptr, 0, 0) < 0) {
-      NativeScanRelease();
-      ResponseCmndFailed();
-      return;
-    }
-    NativeScan.started = millis();
-    NativeScan.running = true;
+    if (!NativeScanStart()) { ResponseCmndFailed(); return; }
     ResponseCmndChar(D_JSON_SCANNING);
     return;
   }
@@ -121,4 +125,29 @@ void CmndWifiScan(void) {
   }
   ResponseAppend_P(PSTR("],\"Truncated\":%s,\"ScanCapacity\":16}"), truncated ? "true" : "false");
 }
+#ifdef USE_WEBSERVER
+uint8_t native_web_scan_indices[16];
+unsigned native_web_scan_count=0;
+int NativeWebScan() {
+  if (!NativeScan.running && !NativeScanStart()) return 0;
+  while (NativeScan.running) { NativeScanPoll(); delay(10); }
+  unsigned& count=native_web_scan_count;
+  count=0;
+  if (NativeScan.valid) {
+    for (unsigned i=0;i<16;++i) {
+      if (NativeScan.entries[i].is_valid && NativeScan.entries[i].ssid_length<=32)
+        native_web_scan_indices[count++]=i;
+    }
+  }
+  return count;
+}
+String NativeWebSSID(unsigned index) {
+  if (index>=native_web_scan_count) return String();
+  const auto& entry=NativeScan.entries[native_web_scan_indices[index]];
+  char ssid[33]; memcpy(ssid,entry.ssid,entry.ssid_length);ssid[entry.ssid_length]=0;
+  return String(ssid);
+}
+int NativeWebRSSI(unsigned index) { return index<native_web_scan_count?NativeScan.entries[native_web_scan_indices[index]].rssi:-127; }
+int NativeWebChannel(unsigned index) { return index<native_web_scan_count?NativeScan.entries[native_web_scan_indices[index]].channel:0; }
+#endif
 #endif

@@ -168,7 +168,8 @@ def main():
             if directory.is_dir():
                 flags += ["-I" + (directory / "src" if (directory / "src").is_dir() else directory).as_posix()]
         sources += [root / "lib/default/Ext-printf/src/ext_printf.cpp",
-                    root / "lib/default/jsmn-shadinger-1.0/src/JsonGenerator.cpp"]
+                    root / "lib/default/jsmn-shadinger-1.0/src/JsonGenerator.cpp",
+                    root / "lib/default/Unishox-Tasmota-1.0/src/unishox.cpp"]
         units = [sketch / "tasmota.ino"] + sorted(sketch.glob("tasmota_*/*.ino"))
         application = BUILD / "tasmota.cpp"
         application.write_text('#include <Arduino.h>\n' +

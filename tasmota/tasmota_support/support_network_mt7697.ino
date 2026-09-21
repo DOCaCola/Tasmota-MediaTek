@@ -30,7 +30,20 @@ bool WifiHasIP(void) {
   return WiFi.status() == WL_CONNECTED && static_cast<uint32_t>(WiFi.localIP()) != 0;
 }
 
+bool WifiGetIP(IPAddress* address, bool exclude_ap) {
+  if (WifiHasIP()) { *address=WiFi.localIP(); return true; }
+#ifdef USE_WEBSERVER
+  if (!exclude_ap && NativeWifiManagerActive()) { *address=WiFi.softAPIP(); return true; }
+#else
+  (void)exclude_ap;
+#endif
+  return false;
+}
+
 String IPGetListeningAddressStr(void) {
+#ifdef USE_WEBSERVER
+  if (NativeWifiManagerActive()) return WiFi.softAPIP().toString();
+#endif
   return WifiHasIP() ? WiFi.localIP().toString() : String();
 }
 

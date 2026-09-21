@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #pragma once
-// Initial native target: serial commands, MQTT, persistent station settings.
-// Native OTA integration is still required; ESP updaters are not selected.
-#undef USE_WEBSERVER
+// Native target: serial/MQTT commands, Wi-Fi Manager, web UI and HTTP URL OTA.
+// ESP-specific updaters and peripheral drivers are not selected.
+#ifndef USE_WEBSERVER
+#define USE_WEBSERVER
+#endif
 #undef USE_EMULATION
 #undef USE_EMULATION_HUE
 #undef USE_EMULATION_WEMO

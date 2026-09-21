@@ -23,6 +23,9 @@ void WifiSetState(uint8_t state) {
 }
 
 void WifiShutdown(bool option) {
+#ifdef USE_WEBSERVER
+  NativeWifiManagerStop();
+#endif
   // The ESP "erase SDK credentials" option is inapplicable: Tasmota owns them.
   (void)option;
   if (!mt7697::station().stop()) {
@@ -49,7 +52,11 @@ void WifiConnect(void) {
     return;
   }
   if (!ssid[0]) {
+#ifdef USE_WEBSERVER
+    WifiManagerBegin(false);
+#else
     AddLog(LOG_LEVEL_INFO, PSTR("WIF: Configure SSID and password through the serial commands"));
+#endif
     return;
   }
   if (!mt7697::station().begin(ssid, password, millis())) {
@@ -59,6 +66,12 @@ void WifiConnect(void) {
 }
 
 void WifiCheckIp(void) {
+#ifdef USE_WEBSERVER
+  if (NativeWifiManagerActive()) {
+    WifiSetState(WifiHasIP() ? 1 : 0);
+    return;
+  }
+#endif
   mt7697::station().poll(millis());
   const bool online = mt7697::station().state() == mt7697::NetworkState::Online;
   Wifi.status = online ? WL_CONNECTED : WL_DISCONNECTED;
@@ -70,6 +83,18 @@ void WifiCheck(uint8_t param) {
     WifiDisable();
     return;
   }
+#ifdef USE_WEBSERVER
+  if (param == WIFI_MANAGER || param == WIFI_MANAGER_RESET_ONLY) {
+    if (!NativeWifiManagerActive()) {
+      WifiShutdown(false);
+      WifiManagerBegin(param == WIFI_MANAGER_RESET_ONLY);
+    }
+    NativeWifiManagerPoll();
+    WifiCheckIp();
+    return;
+  }
+  NativeWifiManagerPoll();
+#endif
   if (param != WIFI_RESTART && param != WIFI_RETRY && param != WIFI_WAIT) {
     AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Configuration mode %u is not implemented on MT7697N"), param);
   }
@@ -79,6 +104,9 @@ void WifiCheck(uint8_t param) {
 void WifiEnable(void) { WifiConnect(); }
 uint16_t WifiLinkCount(void) { return Wifi.link_count; }
 int WifiState(void) {
+#ifdef USE_WEBSERVER
+  if (NativeWifiManagerActive()) return WIFI_MANAGER;
+#endif
   return TasmotaGlobal.global_state.wifi_down ? -1 : WIFI_RESTART;
 }
 int WifiGetRssiAsQuality(int rssi) {

@@ -5,6 +5,7 @@
 #define PROGMEM
 #define PSTR(x) x
 #define TASMOTA_PLATFORM_MT7697N
+#define USE_WEBSERVER
 #include "include/tasmota.h"
 #include "language/en_GB.h"
 #include "include/tasmota_template.h"
@@ -42,6 +43,13 @@ Network native_network(driver);
 Network& station() { return native_network; }
 }
 
+bool manager_active=false;
+unsigned manager_starts=0;
+void NativeWifiManagerStop() {manager_active=false;}
+bool NativeWifiManagerActive() {return manager_active;}
+void NativeWifiManagerPoll() {}
+void WifiManagerBegin(bool) {manager_active=true;++manager_starts;}
+bool WifiHasIP() {return driver.connected;}
 #include "tasmota_support/support_wifi_mt7697.ino"
 
 int main() {
@@ -51,6 +59,7 @@ int main() {
   configured = false;
   WifiConnect();
   assert(driver.starts == 0);
+  assert(manager_active && manager_starts==1 && WifiState()==WIFI_MANAGER);
   configured = true;
   Settings->ipv4_address[0] = 1;
   WifiConnect();
@@ -81,6 +90,11 @@ int main() {
   driver.connected = true;
   WifiCheck(WIFI_RESTART);
   assert(WifiLinkCount() == 2 && Wifi.downtime == 11);
+  const int prior_errors=errors;
+  WifiCheck(WIFI_MANAGER);
+  assert(manager_active && manager_starts==2 && errors==prior_errors);
+  WifiCheck(WIFI_MANAGER);
+  assert(manager_starts==2);
   Settings->flag4.network_wifi = false;
   WifiCheck(WIFI_RESTART);
   assert(mt7697::station().state() == mt7697::NetworkState::Disabled);

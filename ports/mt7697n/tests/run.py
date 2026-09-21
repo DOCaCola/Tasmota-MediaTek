@@ -116,3 +116,21 @@ if __name__ == "__main__":
         *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
         *c_objects, "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
+
+    executable = output / "webserver.exe"
+    subprocess.run([
+        options.cxx, "-std=c++17", "-Wall", "-Wextra",
+        "-I" + str(HERE / "web_fakes"), "-I" + str(arduino),
+        str(HERE / "webserver_test.cpp"), str(PORT / "platform/native_webserver.cpp"),
+        *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
+        *c_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+
+    executable = output / "dns.exe"
+    subprocess.run([
+        options.cxx, "-std=c++17", "-Wall", "-Wextra",
+        "-I" + str(HERE / "web_fakes"), "-I" + str(arduino),
+        str(HERE / "dns_test.cpp"),
+        *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
+        *c_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)

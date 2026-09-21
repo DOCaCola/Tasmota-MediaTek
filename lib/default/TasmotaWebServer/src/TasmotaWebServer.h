@@ -20,6 +20,10 @@
 #ifndef __TASMOTA_WEBSERVER__
 #define __TASMOTA_WEBSERVER__
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#include <platform/native_webserver.h>
+#endif
+
 #ifdef ESP8266
 #include <ESP8266WebServer.h>
 

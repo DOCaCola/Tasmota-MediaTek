@@ -44,6 +44,9 @@
 #include <LWiFi.h>
 #include <WiFiUdp.h>
 #include "platform/system.h"
+#ifdef USE_WEBSERVER
+#include <platform/native_webserver.h>
+#endif
 extern "C" {
 #include <wifi_api.h>
 }
@@ -57,7 +60,7 @@ extern "C" {
 #include "HTTPUpdateLight.h"                // Ota over HTTPS for ESP32
 #endif  // USE_TLS
 #endif  // ESP32
-#if defined(USE_WEBSERVER) || !defined(TASMOTA_PLATFORM_MT7697N)
+#if !defined(TASMOTA_PLATFORM_MT7697N)
 #include <StreamString.h>                   // Webserver, Updater
 #endif
 #include <ext_printf.h>

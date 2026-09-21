@@ -93,7 +93,8 @@ def add_prototypes(preprocessed, ctags):
         if not origins[index].endswith(".ino") or "class" in fields:
             continue
         signature = fields["signature"]
-        prototypes.append(fields["returntype"] + " " + parts[0] + signature + ";\n")
+        storage = "static " if re.match(r"\s*static\b", lines[index]) else ""
+        prototypes.append(storage + fields["returntype"] + " " + parts[0] + signature + ";\n")
         if "=" in signature:
             # ctags normalizes whitespace. Match the actual declaration to avoid
             # changing calls or body expressions with the same function name.

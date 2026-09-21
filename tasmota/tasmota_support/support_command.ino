@@ -228,7 +228,11 @@ void CmndWifiTest(void)
         AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CONNECTING_TO_AP " %s " D_AS " %s ..."),
           ssid_test, TasmotaGlobal.hostname);
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+        NativeWifiTestBegin(ssid_test, pswd_test);
+#else
         WiFiHelper::begin(ssid_test,pswd_test);
+#endif
       }
     } else {
       ResponseCmndChar(D_JSON_BUSY);

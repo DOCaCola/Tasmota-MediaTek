@@ -56,10 +56,27 @@ const uint16_t HTTP_RESTART_RECONNECT_TIME = 10000;      // milliseconds - Allow
 #ifdef ESP8266
 const uint16_t HTTP_OTA_RESTART_RECONNECT_TIME = 24000;  // milliseconds - Allow time for uploading binary, unzip/write to final destination and wifi reconnect
 #endif  // ESP8266
-#ifdef ESP32
+#if defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
 const uint16_t HTTP_OTA_RESTART_RECONNECT_TIME = 10000;  // milliseconds - Allow time for restart and wifi reconnect
 #endif  // ESP32
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#define WEB_SDK_VERSION() "LinkIt BSP 0.10.21"
+#define WEB_IMAGE_SIZE() mt7697::image_size()
+#define WEB_FREE_IMAGE_SPACE() (mt7697::application_capacity()-mt7697::image_size())
+#define WEB_AP_ACTIVE() NativeWifiManagerActive()
+#define WEB_CHANNEL() WifiChannel()
+#define WEB_BSSID() WifiBssid()
+#define WEB_MAC() WifiMacAddress()
+#else
+#define WEB_SDK_VERSION() ESP.getSdkVersion()
+#define WEB_IMAGE_SIZE() ESP_getSketchSize()
+#define WEB_FREE_IMAGE_SPACE() ESP_getFreeSketchSpace()
+#define WEB_AP_ACTIVE() (WiFi.getMode() >= WIFI_AP)
+#define WEB_CHANNEL() WiFi.channel()
+#define WEB_BSSID() WiFi.BSSIDstr()
+#define WEB_MAC() WiFiHelper::macAddress()
+#endif
 #include "TasmotaWebServer.h"
 #include <DNSServer.h>
 
@@ -599,7 +616,9 @@ const WebServerDispatch_t WebServerDispatch[] PROGMEM = {
   { "up", HTTP_ANY, HandleUpgradeFirmware },
   { "u1", HTTP_ANY, HandleUpgradeFirmwareStart },   // OTA
   { "u2", HTTP_OPTIONS, HandlePreflightRequest },
+#ifndef TASMOTA_PLATFORM_MT7697N
   { "u3", HTTP_ANY, HandleUploadDone },
+#endif
 #ifdef ESP32
   { "u4", HTTP_GET, HandleSwitchBootPartition },
 #endif // ESP32
@@ -628,7 +647,7 @@ void WebServer_on(const char * prefix, void (*func)(void), uint8_t method = HTTP
 #ifdef ESP8266
   Webserver->on((const __FlashStringHelper *) prefix, (HTTPMethod) method, func);
 #endif  // ESP8266
-#ifdef ESP32
+#if defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
   Webserver->on(prefix, (HTTPMethod) method, func);
 #endif  // ESP32
 }
@@ -675,7 +694,9 @@ void StartWebserver(int type) {
       }
       Webserver->onNotFound(HandleNotFound);
 //      Webserver->on(F("/u2"), HTTP_POST, HandleUploadDone, HandleUploadLoop);  // this call requires 2 functions so we keep a direct call
-      Webserver->on("/u2", HTTP_POST, HandleUploadDone, HandleUploadLoop);  // this call requires 2 functions so we keep a direct call
+#ifndef TASMOTA_PLATFORM_MT7697N
+      Webserver->on("/u2", HTTP_POST, HandleUploadDone, HandleUploadLoop);
+#endif  // this call requires 2 functions so we keep a direct call
 #ifndef FIRMWARE_MINIMAL
       XdrvXsnsCall(FUNC_WEB_ADD_HANDLER);
 #endif  // Not FIRMWARE_MINIMAL
@@ -688,6 +709,12 @@ void StartWebserver(int type) {
     Web.reset_web_log_flag = false;
 
     Webserver->begin(); // Web server start
+#ifdef TASMOTA_PLATFORM_MT7697N
+    if (!Webserver->listening()) {
+      AddLog(LOG_LEVEL_ERROR, PSTR("HTP: Failed to open listening socket"));
+      return;
+    }
+#endif
   }
   if (Web.state != type) {
     AddLogServerActive(PSTR(D_LOG_HTTP "Web"));
@@ -730,6 +757,7 @@ void WebserverStartSocket(void) {
 void WifiManagerBegin(bool reset_only) {
   // setup AP
   if (!Web.initial_config) { AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_WCFG_2_WIFIMANAGER " " D_ACTIVE_FOR_3_MINUTES)); }
+#ifndef TASMOTA_PLATFORM_MT7697N
   if (!TasmotaGlobal.global_state.wifi_down) {
     WifiSetMode(WIFI_AP_STA);
     AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_WIFIMANAGER_SET_ACCESSPOINT_AND_STATION));
@@ -738,6 +766,7 @@ void WifiManagerBegin(bool reset_only) {
     AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_WIFIMANAGER_SET_ACCESSPOINT));
   }
 
+#endif
   //StopWebserver();
 
   DnsServer = new DNSServer();
@@ -746,11 +775,27 @@ void WifiManagerBegin(bool reset_only) {
   if ((channel < 1) || (channel > 13)) { channel = 1; }
 
   // bool softAP(const char* ssid, const char* passphrase = NULL, int channel = 1, int ssid_hidden = 0, int max_connection = 4);
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (!NativeWifiStartAP(TasmotaGlobal.hostname, WIFI_AP_PASSPHRASE, channel)) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Setup AP failed"));
+    delete DnsServer; DnsServer = nullptr;
+    return;
+  }
+#else
   WiFi.softAP(TasmotaGlobal.hostname, WIFI_AP_PASSPHRASE, channel, 0, 1);
+#endif
   delay(500); // Without delay I've seen the IP address blank
   /* Setup the DNS server redirecting all the domains to the apIP */
   DnsServer->setErrorReplyCode(DNSReplyCode::NoError);
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (!DnsServer->start(DNS_PORT, "*", WiFi.softAPIP())) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("WIF: Captive DNS failed to start"));
+    NativeWifiManagerStop();
+    return;
+  }
+#else
   DnsServer->start(DNS_PORT, "*", WiFi.softAPIP());
+#endif
 
   StartWebserver((reset_only ? HTTP_MANAGER_RESET_ONLY : HTTP_MANAGER));
 }
@@ -2012,7 +2057,7 @@ bool HandleRootStatusRefresh(void) {
     WSContentSend_P(PSTR("<div class='wifi' title='" D_SSID ": %s\n" D_RSSI ": %d%% (%d dBm)\n" D_AP ": %s'><div class='arc a3%s'></div><div class='arc a2%s'></div><div class='arc a1%s'></div><div class='arc a0'></div></div>"),
                           SettingsTextEscaped(SET_STASSID1 + Settings->sta_active).c_str(),
                           WifiGetRssiAsQuality(rssi), rssi,
-                          WiFi.BSSIDstr().c_str(),
+                          WEB_BSSID().c_str(),
                           rssi < -55 ? " o30" : "",
                           rssi < -70 ? " o30" : "",
                           rssi < -85 ? " o30" : "");
@@ -2203,6 +2248,9 @@ void WSContentSendAdcNiceList(uint32_t option) {
 /*-------------------------------------------------------------------------------------------*/
 
 void HandleTemplateConfiguration(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  Webserver->send(501, "text/plain", "GPIO/template configuration is not available on this target");
+#else
   if (!HttpCheckPriviledgedAccess()) { return; }
 
   if (Webserver->hasArg(F("save"))) {
@@ -2302,6 +2350,7 @@ void HandleTemplateConfiguration(void) {
   WSContentSend_P(HTTP_FORM_END);
   WSContentSpaceButton(BUTTON_CONFIGURATION);
   WSContentStop();
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------*/
@@ -2324,6 +2373,9 @@ uint16_t WebGetGpioArg(uint32_t i) {
 /*-------------------------------------------------------------------------------------------*/
 
 void TemplateSaveSettings(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  Webserver->send(501, "text/plain", "GPIO/template configuration is not available on this target");
+#else
   char tmp[TOPSZ];                                      // WebGetArg NAME and GPIO/BASE/FLAG byte value
 #ifdef ESP8266
   char command[300];                                    // Template command string
@@ -2383,6 +2435,7 @@ void TemplateSaveSettings(void) {
 
   snprintf_P(command, sizeof(command), PSTR("%s],\"" D_JSON_FLAG "\":%d,\"" D_JSON_BASE "\":%d}"), command, flag, base);
   ExecuteWebCommand(command);
+#endif
 }
 
 /*********************************************************************************************\
@@ -2390,6 +2443,9 @@ void TemplateSaveSettings(void) {
 \*********************************************************************************************/
 
 void HandleModuleConfiguration(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  Webserver->send(501, "text/plain", "GPIO/template configuration is not available on this target");
+#else
   if (!HttpCheckPriviledgedAccess()) { return; }
 
   if (Webserver->hasArg(F("save"))) {
@@ -2455,11 +2511,15 @@ void HandleModuleConfiguration(void) {
   WSContentSend_P(HTTP_FORM_END);
   WSContentSpaceButton(BUTTON_CONFIGURATION);
   WSContentStop();
+#endif
 }
 
 /*-------------------------------------------------------------------------------------------*/
 
 void ModuleSaveSettings(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  Webserver->send(501, "text/plain", "GPIO/template configuration is not available on this target");
+#else
   char tmp[8];         // WebGetArg numbers only
   WebGetArg(PSTR("g99"), tmp, sizeof(tmp));  // Module
   uint32_t new_module = (!strlen(tmp)) ? MODULE : atoi(tmp);
@@ -2480,12 +2540,22 @@ void ModuleSaveSettings(void) {
   char command[32];
   snprintf_P(command, sizeof(command), PSTR(D_CMND_BACKLOG "0 " D_CMND_MODULE ";" D_CMND_GPIO));
   ExecuteWebCommand(command);
+#endif
 }
 
 /*********************************************************************************************\
  * HandleWifiConfiguration
 \*********************************************************************************************/
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#define WEB_SCAN_SSID NativeWebSSID
+#define WEB_SCAN_RSSI NativeWebRSSI
+#define WEB_SCAN_CHANNEL NativeWebChannel
+#else
+#define WEB_SCAN_SSID WiFi.SSID
+#define WEB_SCAN_RSSI WiFi.RSSI
+#define WEB_SCAN_CHANNEL WiFi.channel
+#endif
 void HandleWifiConfiguration(void) {
   char tmp[TOPSZ];  // Max length is currently 150
 
@@ -2521,7 +2591,11 @@ void HandleWifiConfiguration(void) {
       AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_WIFI D_CONNECTING_TO_AP " %s " D_AS " %s ..."),
         SettingsText(SET_STASSID1), TasmotaGlobal.hostname);
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+      NativeWifiTestBegin(SettingsText(SET_STASSID1), SettingsText(SET_STAPWD1));
+#else
       WiFiHelper::begin(SettingsText(SET_STASSID1), SettingsText(SET_STAPWD1));
+#endif
 
       WebRestart(2);
     } else {
@@ -2571,11 +2645,15 @@ void HandleWifiConfiguration(void) {
 #ifdef USE_EMULATION
       UdpDisconnect();
 #endif  // USE_EMULATION
+#ifdef TASMOTA_PLATFORM_MT7697N
+      int n = NativeWebScan();
+#else
       int n = WiFi.scanNetworks(true);
       while(n<0){
         delay(50); // some magic number - maybe non optimal
         n = WiFi.scanComplete();
       }
+#endif
       AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_WIFI D_SCAN_DONE));
 
       if (0 == n) {
@@ -2592,7 +2670,7 @@ void HandleWifiConfiguration(void) {
         // RSSI SORT
         for (uint32_t i = 0; i < n; i++) {
           for (uint32_t j = i + 1; j < n; j++) {
-            if (WiFi.RSSI(indices[j]) > WiFi.RSSI(indices[i])) {
+            if (WEB_SCAN_RSSI(indices[j]) > WEB_SCAN_RSSI(indices[i])) {
               std::swap(indices[i], indices[j]);
             }
           }
@@ -2612,10 +2690,10 @@ void HandleWifiConfiguration(void) {
         int ssid_showed = 0;
         for (uint32_t i = 0; i < networksToShow; i++) {
           if (indices[i] < n) {
-            int32_t rssi = WiFi.RSSI(indices[i]);
-            String ssid = WiFi.SSID(indices[i]);
+            int32_t rssi = WEB_SCAN_RSSI(indices[i]);
+            String ssid = WEB_SCAN_SSID(indices[i]);
             DEBUG_CORE_LOG(PSTR(D_LOG_WIFI D_SSID " %s, " D_BSSID " %s, " D_CHANNEL " %d, " D_RSSI " %d"),
-              ssid.c_str(), WiFi.BSSIDstr(indices[i]).c_str(), WiFi.channel(indices[i]), rssi);
+              ssid.c_str(), WiFi.BSSIDstr(indices[i]).c_str(), WEB_SCAN_CHANNEL(indices[i]), rssi);
 
             String ssid_copy = ssid;
             if (!ssid_copy.length()) { ssid_copy = F("no_name"); }
@@ -2631,10 +2709,10 @@ void HandleWifiConfiguration(void) {
 #endif
             // Handle all APs with the same SSID
             for (uint32_t j = 0; j < n; j++) {
-              if ((indices[j] < n) && ((nextSSID = WiFi.SSID(indices[j])) == ssid)) {
+              if ((indices[j] < n) && ((nextSSID = WEB_SCAN_SSID(indices[j])) == ssid)) {
                 if (!skipduplicated) {
                   // Update RSSI / quality
-                  rssi = WiFi.RSSI(indices[j]);
+                  rssi = WEB_SCAN_RSSI(indices[j]);
                   uint8_t rssi_as_quality = WifiGetRssiAsQuality(rssi);
                   uint8_t num_bars = changeUIntScale(rssi_as_quality, 0, 100, 0, 4);
 
@@ -2652,7 +2730,7 @@ void HandleWifiConfiguration(void) {
                     WSContentSend_P(PSTR("%s<span title='%d%% (%d dBm)' class='q'>(%d) <div class='si'>"),
                       WiFi.BSSIDstr(indices[j]).c_str(),
                       rssi_as_quality, rssi,
-                      WiFi.channel(indices[j]));
+                      WEB_SCAN_CHANNEL(indices[j]));
 #ifdef USE_HIGHLIGHT_CONNECTED_AP
                     HighlightAP = WiFi.BSSIDstr(indices[j]) == WiFi.BSSIDstr();
 #endif
@@ -2687,11 +2765,11 @@ void HandleWifiConfiguration(void) {
         // remove duplicates ( must be RSSI sorted )
         for (uint32_t i = 0; i < n; i++) {
           if (-1 == indices[i]) { continue; }
-          String cssid = WiFi.SSID(indices[i]);
-          uint32_t cschn = WiFi.channel(indices[i]);
+          String cssid = WEB_SCAN_SSID(indices[i]);
+          uint32_t cschn = WEB_SCAN_CHANNEL(indices[i]);
           for (uint32_t j = i + 1; j < n; j++) {
-            if ((cssid == WiFi.SSID(indices[j])) && (cschn == WiFi.channel(indices[j]))) {
-              DEBUG_CORE_LOG(PSTR(D_LOG_WIFI D_DUPLICATE_ACCESSPOINT " %s"), WiFi.SSID(indices[j]).c_str());
+            if ((cssid == WEB_SCAN_SSID(indices[j])) && (cschn == WEB_SCAN_CHANNEL(indices[j]))) {
+              DEBUG_CORE_LOG(PSTR(D_LOG_WIFI D_DUPLICATE_ACCESSPOINT " %s"), WEB_SCAN_SSID(indices[j]).c_str());
               indices[j] = -1;  // set dup aps to index -1
             }
           }
@@ -2700,15 +2778,15 @@ void HandleWifiConfiguration(void) {
         //display networks in page
         for (uint32_t i = 0; i < networksToShow; i++) {
           if (-1 == indices[i]) { continue; }  // skip dups
-          int32_t rssi = WiFi.RSSI(indices[i]);
+          int32_t rssi = WEB_SCAN_RSSI(indices[i]);
           DEBUG_CORE_LOG(PSTR(D_LOG_WIFI D_SSID " %s, " D_BSSID " %s, " D_CHANNEL " %d, " D_RSSI " %d"),
-            WiFi.SSID(indices[i]).c_str(), WiFi.BSSIDstr(indices[i]).c_str(), WiFi.channel(indices[i]), rssi);
+            WEB_SCAN_SSID(indices[i]).c_str(), WiFi.BSSIDstr(indices[i]).c_str(), WEB_SCAN_CHANNEL(indices[i]), rssi);
           int quality = WifiGetRssiAsQuality(rssi);
-          String ssid_copy = WiFi.SSID(indices[i]);
+          String ssid_copy = WEB_SCAN_SSID(indices[i]);
           if (!ssid_copy.length()) { ssid_copy = F("no_name"); }
           WSContentSend_P(PSTR("<div><a href='#p' onclick='c(this)'>%s</a>&nbsp;(%d)&nbsp<span class='q'>%d%% (%d dBm)</span></div>"),
             HtmlEscape(ssid_copy).c_str(),
-            WiFi.channel(indices[i]),
+            WEB_SCAN_CHANNEL(indices[i]),
             quality, rssi
           );
 
@@ -2991,7 +3069,7 @@ void HandleBackupConfiguration(void) {
   uint32_t config_len = SettingsConfigBackup();
   if (!config_len) { return; }    // Unable to allocate buffer
 
-  WiFiClient myClient = Webserver->client();
+  auto& myClient = Webserver->client();
   Webserver->setContentLength(config_len);
 
   char attachment[TOPSZ];
@@ -3030,6 +3108,9 @@ void HandleResetConfiguration(void) {
 \*********************************************************************************************/
 
 void HandleRestoreConfiguration(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (HttpCheckPriviledgedAccess()) WSSend(501, CT_PLAIN, "Configuration file upload is not supported on MT7697N");
+#else
   if (!HttpCheckPriviledgedAccess()) { return; }
 
   AddLog(LOG_LEVEL_DEBUG, PSTR(D_LOG_HTTP D_RESTORE_CONFIGURATION));
@@ -3047,6 +3128,7 @@ void HandleRestoreConfiguration(void) {
   WSContentStop();
 
   Web.upload_file_type = UPL_SETTINGS;
+#endif
 }
 
 /*********************************************************************************************\
@@ -3096,7 +3178,7 @@ void HandleInformation(void) {
     TasmotaGlobal.image_name, 
     GetCodeCores().c_str());
   WSContentSend_P(PSTR("}1" D_BUILD_DATE_AND_TIME "}2%s"), GetBuildDateAndTime().c_str());
-  WSContentSend_P(PSTR("}1" D_CORE_AND_SDK_VERSION "}2" ARDUINO_CORE_RELEASE "/%s"), ESP.getSdkVersion());
+  WSContentSend_P(PSTR("}1" D_CORE_AND_SDK_VERSION "}2" ARDUINO_CORE_RELEASE "/%s"), WEB_SDK_VERSION());
   WSContentSend_P(PSTR("}1" D_UPTIME "}2%s"), GetUptime().c_str());
 #ifdef ESP8266
   WSContentSend_P(PSTR("}1" D_FLASH_WRITE_COUNT "}2%d " D_AT " 0x%X"), 
@@ -3125,7 +3207,7 @@ void HandleInformation(void) {
   WSContentSeparatorIFat();
 #endif  // CONFIG_ESP_WIFI_REMOTE_ENABLED
   bool show_hr = false;
-  if ((WiFi.getMode() >= WIFI_AP) && (static_cast<uint32_t>(WiFi.softAPIP()) != 0)) {
+  if ((WEB_AP_ACTIVE()) && (static_cast<uint32_t>(WiFi.softAPIP()) != 0)) {
     WSContentSend_P(PSTR("}1" D_MAC_ADDRESS "}2%s"), WiFi.softAPmacAddress().c_str());
     WSContentSend_P(PSTR("}1" D_IP_ADDRESS " (AP)}2%_I"), (uint32_t)WiFi.softAPIP());
     WSContentSend_P(PSTR("}1" D_GATEWAY "}2%_I"), (uint32_t)WiFi.softAPIP());
@@ -3138,8 +3220,8 @@ void HandleInformation(void) {
       SettingsTextEscaped(SET_STASSID1 + Settings->sta_active).c_str(),
       WifiGetRssiAsQuality(rssi), rssi,
       WifiGetPhyMode().c_str(),
-      WiFi.channel(),
-      WiFi.BSSIDstr().c_str());
+      WEB_CHANNEL(),
+      WEB_BSSID().c_str());
     WSContentSeparatorIFat();
     WSContentSend_P(PSTR("}1" D_HOSTNAME "}2%s%s"), 
       TasmotaGlobal.hostname, 
@@ -3155,7 +3237,7 @@ void HandleInformation(void) {
     }
 #endif  // USE_IPV6
     if (static_cast<uint32_t>(WiFi.localIP()) != 0) {
-      WSContentSend_P(PSTR("}1" D_MAC_ADDRESS "}2%s"), WiFiHelper::macAddress().c_str());
+      WSContentSend_P(PSTR("}1" D_MAC_ADDRESS "}2%s"), WEB_MAC().c_str());
       WSContentSend_P(PSTR("}1" D_IP_ADDRESS " (WiFi)}2%_I"), (uint32_t)WiFi.localIP());
     }
     show_hr = true;
@@ -3263,7 +3345,9 @@ void HandleInformation(void) {
   WSContentSend_P(PSTR("}1" D_ESP_CHIP_ID "}2%d (%s)"), 
     ESP_getChipId(), 
     GetDeviceHardwareRevision().c_str());
+#ifndef TASMOTA_PLATFORM_MT7697N
   WSContentSend_P(PSTR("}1" D_FLASH_CHIP_ID "}20x%06X (" D_TASMOTA_FLASHMODE ")"), ESP_getFlashChipId());
+#endif
 #ifdef ESP32
   WSContentSend_P(PSTR("}1" D_FLASH_CHIP_SIZE "}2%d KB"), ESP.getFlashChipSize() / 1024);
   WSContentSend_P(PSTR("}1" D_PROGRAM_FLASH_SIZE "}2%d KB"), ESP_getFlashChipMagicSize() / 1024);
@@ -3272,8 +3356,8 @@ void HandleInformation(void) {
   WSContentSend_P(PSTR("}1" D_FLASH_CHIP_SIZE "}2%d KB"), ESP.getFlashChipRealSize() / 1024);
   WSContentSend_P(PSTR("}1" D_PROGRAM_FLASH_SIZE "}2%d KB"), ESP_getFlashChipSize() / 1024);
 #endif // ESP8266
-  WSContentSend_P(PSTR("}1" D_PROGRAM_SIZE "}2%d KB"), ESP_getSketchSize() / 1024);
-  WSContentSend_P(PSTR("}1" D_FREE_PROGRAM_SPACE "}2%d KB"), ESP_getFreeSketchSpace() / 1024);
+  WSContentSend_P(PSTR("}1" D_PROGRAM_SIZE "}2%d KB"), WEB_IMAGE_SIZE() / 1024);
+  WSContentSend_P(PSTR("}1" D_FREE_PROGRAM_SPACE "}2%d KB"), WEB_FREE_IMAGE_SPACE() / 1024);
 #ifdef ESP32
 #ifdef USE_GT911
   WSContentSend_PD(PSTR("}1" D_FREE_MEMORY "}2%1_f KB"), &freemem);
@@ -3304,7 +3388,7 @@ void HandleInformation(void) {
       }
       else if ((part->subtype >= ESP_PARTITION_SUBTYPE_APP_OTA_MIN) && (part->subtype <= ESP_PARTITION_SUBTYPE_APP_OTA_MAX)) {
         if (cur_part == part->subtype) {
-          prog_size = ESP_getSketchSize();                 // Active running ota partition (fast response)
+          prog_size = WEB_IMAGE_SIZE();                 // Active running ota partition (fast response)
         }
         else if (cur_part == ESP_PARTITION_SUBTYPE_APP_FACTORY) {
           prog_size = EspProgramSize(part->label);         // One app partition when safeboot partitions (slow response)
@@ -3412,6 +3496,7 @@ void HandleUpgradeFirmware(void) {
   WSContentSend_P(HTTP_FIELDSET_LEGEND, PSTR(D_UPGRADE_BY_WEBSERVER));
   WSContentSend_P(HTTP_FORM_GET_ACTION, PSTR("u1"));
   WSContentSend_P(HTTP_FORM_UPG, SettingsTextEscaped(SET_OTAURL).c_str());
+#ifndef TASMOTA_PLATFORM_MT7697N
   WSContentSend_P(HTTP_FIELDSET_LEGEND, PSTR(D_UPGRADE_BY_FILE_UPLOAD));
 #ifdef ESP32
   if (EspSingleOtaPartition() && !EspRunningFactoryPartition()) {
@@ -3422,6 +3507,7 @@ void HandleUpgradeFirmware(void) {
 #else
   WSContentSend_P(HTTP_FORM_RST_UPG, PSTR(D_START_UPGRADE));
 #endif  // ESP32
+#endif
   WSContentSpaceButton(BUTTON_MAIN);
   WSContentStop();
 
@@ -3459,6 +3545,7 @@ void HandleUpgradeFirmwareStart(void) {
 
 /*-------------------------------------------------------------------------------------------*/
 
+#ifndef TASMOTA_PLATFORM_MT7697N
 void HandleUploadDone(void) {
   if (!HttpCheckPriviledgedAccess()) { return; }
 
@@ -3801,6 +3888,8 @@ void HandleUploadLoop(void) {
 //  Scheduler();          // Feed OsWatch timer to prevent restart on long uploads
 }
 
+#endif // !TASMOTA_PLATFORM_MT7697N
+
 /*********************************************************************************************\
  * HandlePreflightRequest
 \*********************************************************************************************/
@@ -4137,6 +4226,11 @@ void WebRunInit(const char *command_buffer) {
 /*-------------------------------------------------------------------------------------------*/
 
 int WebQuery(char *buffer, int query_function = 0) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  (void)buffer; (void)query_function;
+  ResponseCmndChar(PSTR("Outbound WebQuery is not supported on MT7697N"));
+  return WEBCMND_VALID_RESPONSE;
+#else
   // http://192.168.1.1/path GET                                         -> Sends HTTP GET http://192.168.1.1/path
   // http://192.168.1.1/path POST {"some":"message"}                     -> Sends HTTP POST to http://192.168.1.1/path with body {"some":"message"}
   // http://192.168.1.1/path PUT [Autorization: Bearer abcdxyz] potato   -> Sends HTTP PUT to http://192.168.1.1/path with authorization header and body "potato"
@@ -4253,6 +4347,7 @@ int WebQuery(char *buffer, int query_function = 0) {
     }
   }
   return status;
+#endif
 }
 
 
@@ -4810,7 +4905,11 @@ bool Xdrv01(uint32_t function) {
               }
               Wifi.wifi_test_AP_TIMEOUT = true;
           }
+#ifdef TASMOTA_PLATFORM_MT7697N
+          NativeScanStart();
+#else
           WiFi.scanNetworks(); // restart scan
+#endif
         }
       }
       break;

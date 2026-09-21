@@ -248,3 +248,18 @@ if trigger cleanup also failed, an update might still be armed. Download
 failures can be retried; a completed download is held until reboot.
 
 Integration evidence: `../../../../RnD/native-ota-http.md`.
+
+## Standard Wi-Fi Manager and web UI
+
+The native build includes the standard Tasmota web driver. With no SSID it opens
+the usual hostname-based setup hotspot at `http://192.168.4.1`, including DHCP,
+captive DNS and browser Wi-Fi setup. `WifiConfig 2` requests the same manager.
+After saving working credentials and restarting, the web UI listens on the
+station's DHCP address. The default AP is open; `WIFI_AP_PASSPHRASE` controls it.
+This revision is build/host-tested; AP, DHCP and browser provisioning still need
+hardware validation. See `../../../../RnD/tasmota-ap-webserver.md`.
+
+The console, settings pages and native URL OTA are available. Multipart file
+uploads/settings restore and GPIO/template configuration are not implemented.
+The transport limits requests to 8 KiB and closes each connection after one
+response. HTTP authentication uses the standard Tasmota web password.

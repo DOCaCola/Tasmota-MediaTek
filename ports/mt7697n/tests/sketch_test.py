@@ -1,9 +1,11 @@
 """Exercise sketch preprocessing without compiling the SDK."""
 import sys
 import unittest
+import tempfile
+from unittest.mock import patch
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sketch import parameter_end, without_defaults
+from sketch import parameter_end, without_defaults, add_prototypes
 
 
 class SketchTests(unittest.TestCase):
@@ -20,6 +22,19 @@ class SketchTests(unittest.TestCase):
     def test_no_defaults(self):
         text = '(const char* text, void (*cb)(int, int))'
         self.assertEqual(without_defaults(text), text)
+
+    def test_static_prototype_keeps_internal_linkage(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "test.ii"
+            source.write_text('''# 1 "test.ino"
+void setup(void) {}
+static bool helper(int n) { return n; }
+''')
+            tags = '''helper	test.ii	/^static/;"	line:3	returntype:bool	signature:(int n)
+'''
+            with patch("sketch.subprocess.check_output", return_value=tags):
+                add_prototypes(source, "ctags")
+            self.assertIn("static bool helper(int n);", source.read_text())
 
     def test_unterminated(self):
         with self.assertRaises(ValueError):

@@ -1697,7 +1697,7 @@ void Every250mSeconds(void)
 #ifdef USE_WEBSERVER
         if (Settings->webserver) {
 
-#ifdef ESP8266
+#if defined(ESP8266) || defined(TASMOTA_PLATFORM_MT7697N)
           if (!WifiIsInManagerMode()) { StartWebserver(Settings->webserver); }
 #endif  // ESP8266
 #ifdef ESP32
