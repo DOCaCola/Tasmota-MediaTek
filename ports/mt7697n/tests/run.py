@@ -35,6 +35,11 @@ if __name__ == "__main__":
             raise RuntimeError("Trial function not found: " + name)
         trial_functions.append(match.group())
     (output / "wifi_trial_functions.inc").write_text("\n\n".join(trial_functions))
+    web_source = (core / "tasmota_xdrv_driver/xdrv_01_9_webserver.ino").read_text()
+    captive = re.search(r"^bool CaptivePortal\(void\) \{.*?^\}", web_source, re.M | re.S)
+    if not captive:
+        raise RuntimeError("CaptivePortal function not found")
+    (output / "captive_portal_function.inc").write_text(captive.group())
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
@@ -136,6 +141,7 @@ if __name__ == "__main__":
     subprocess.run([
         options.cxx, "-std=c++17", "-Wall", "-Wextra",
         "-I" + str(HERE / "web_fakes"), "-I" + str(arduino),
+        "-I" + str(output),
         str(HERE / "webserver_test.cpp"), str(PORT / "platform/native_webserver.cpp"),
         *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
         *c_objects, "-o", str(executable)], check=True)
