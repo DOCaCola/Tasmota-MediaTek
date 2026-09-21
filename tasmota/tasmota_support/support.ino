@@ -2838,7 +2838,7 @@ void AddLogData(uint32_t loglevel, const char* log_data, const char* log_data_pa
   snprintf_P(mxtime, sizeof(mxtime), PSTR("%02d" D_HOUR_MINUTE_SEPARATOR "%02d" D_MINUTE_SECOND_SEPARATOR "%02d.%03d"),
     RtcTime.hour, RtcTime.minute, RtcTime.second, RtcMillis());
   if (Settings->flag5.show_heap_with_timestamp) {
-#ifdef ESP8266
+#if defined(ESP8266) || defined(TASMOTA_PLATFORM_MT7697N)
     snprintf_P(mxtime, sizeof(mxtime), PSTR("%s-%03d"),
       mxtime, ESP_getFreeHeap1024());
 #ifdef USE_ESP8266_DEBUG_HEAP

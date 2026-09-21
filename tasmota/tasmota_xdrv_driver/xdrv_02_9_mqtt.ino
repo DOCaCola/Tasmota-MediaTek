@@ -1093,7 +1093,7 @@ void MqttConnected(void) {
       }
 #endif  // USE_WEBSERVER
       Response_P(PSTR("{\"Info3\":{\"" D_JSON_RESTARTREASON "\":"));
-#ifndef FIRMWARE_MINIMAL
+#if !defined(FIRMWARE_MINIMAL) && !defined(TASMOTA_PLATFORM_MT7697N)
       if (CrashFlag()) {
         CrashDump();
       } else

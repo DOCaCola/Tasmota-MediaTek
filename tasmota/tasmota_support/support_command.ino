@@ -908,9 +908,16 @@ void CmndStatus(void)
     return;   // {"Command":"Error"}
   }
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (12 == payload) {
+    Response_P(PSTR("{\"StatusSTK\":{\"Error\":\"Crash capture unavailable on MT7697N\"}}"));
+    CmndStatusResponse(12);
+    return;
+  }
+#endif
   if (!Settings->flag.mqtt_enabled && (6 == payload)) { return; }  // SetOption3 - Enable MQTT
   if (!TasmotaGlobal.energy_driver && (9 == payload)) { return; }
-#ifndef FIRMWARE_MINIMAL
+#if !defined(FIRMWARE_MINIMAL) && !defined(TASMOTA_PLATFORM_MT7697N)
   if (!CrashFlag() && (12 == payload)) { return; }
 #endif // FIRMWARE_MINIMAL
   if (!Settings->flag3.shutter_mode && (13 == payload)) { return; }
@@ -994,8 +1001,12 @@ void CmndStatus(void)
 #ifdef ESP8266
                           , ESP.getBootVersion()
 #endif
+#ifdef TASMOTA_PLATFORM_MT7697N
+                          , "LinkIt BSP 0.10.21", F_CPU / 1000000, GetDeviceHardwareRevision().c_str(),
+#else
                           , ESP.getSdkVersion(),
                           ESP.getCpuFreqMHz(), GetDeviceHardwareRevision().c_str(),
+#endif
 #ifdef CONFIG_ESP_WIFI_REMOTE_ENABLED
                           GetHostedMCU().c_str(), GetHostedFwVersion(1).c_str(),
 #endif  // CONFIG_ESP_WIFI_REMOTE_ENABLED
@@ -1025,6 +1036,14 @@ void CmndStatus(void)
 
   // Status 4 - StatusMEM
   if ((0 == payload) || (4 == payload)) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+    Response_P(PSTR("{\"StatusMEM\":{\"ProgramSize\":%u,\"Heap\":%u,"
+                    "\"ApplicationCapacity\":%u,\"MinimumFreeHeap\":%u,\"StackLowMark\":%u,"
+                    "\"FlashMode\":\"XIP\""),
+      mt7697::image_size() / 1024, ESP_getFreeHeap1024(),
+      mt7697::application_capacity() / 1024, mt7697::minimum_free_heap() / 1024,
+      mt7697::stack_low_water_bytes() / 1024);
+#else
     Response_P(PSTR("{\"" D_CMND_STATUS D_STATUS4_MEMORY "\":{\"" D_JSON_PROGRAMSIZE "\":%d,\"" D_JSON_FREEMEMORY "\":%d,\"" D_JSON_HEAPSIZE "\":%d"),
                           ESP_getSketchSize()/1024, ESP_getFreeSketchSpace()/1024, ESP_getFreeHeap1024());
 
@@ -1047,6 +1066,7 @@ void CmndStatus(void)
 #endif  // ESP8266 or ESP32
                           , ESP_getFlashChipId(), ESP_getFlashChipSpeed()/1000000);
 
+#endif
     ResponseAppendFeatures();
     XsnsDriverState();
     ResponseAppend_P(PSTR(",\"Sensors\":"));
@@ -1081,7 +1101,11 @@ void CmndStatus(void)
                           TasmotaGlobal.hostname,
                           (uint32_t)WiFi.localIP(), Settings->ipv4_address[1], Settings->ipv4_address[2],
                           Settings->ipv4_address[3], Settings->ipv4_address[4],
+#ifdef TASMOTA_PLATFORM_MT7697N
+                          WifiMacAddress().c_str());
+#else
                           WiFiHelper::macAddress().c_str());
+#endif
 #endif // USE_IPV6
 #ifdef USE_TASMESH
     ResponseAppend_P(PSTR(",\"SoftAPMac\":\"%s\""), WiFi.softAPmacAddress().c_str());
@@ -1176,7 +1200,7 @@ void CmndStatus(void)
     CmndStatusResponse(11);
   }
 
-#ifndef FIRMWARE_MINIMAL
+#if !defined(FIRMWARE_MINIMAL) && !defined(TASMOTA_PLATFORM_MT7697N)
   if (CrashFlag()) {
     // Status 12 - StatusSTK
     if ((0 == payload) || (12 == payload)) {

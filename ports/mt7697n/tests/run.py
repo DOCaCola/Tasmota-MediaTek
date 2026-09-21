@@ -30,6 +30,14 @@ if __name__ == "__main__":
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
+    executable = output / "system.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(HERE / "system_fakes"), str(HERE / "system_test.cpp"),
+                    str(PORT / "platform/system.cpp"), "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+    # Network reporting uses real Arduino value types and the actual .ino;
+    # only SDK calls are replaced to exercise error paths without hardware.
+    # This runs after the Arduino C objects have been generated below.
     cases = {
         "pwm": [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"],
         "platform": [HERE / "platform_test.cpp", PORT / "platform/network.cpp",
@@ -59,5 +67,13 @@ if __name__ == "__main__":
         str(HERE / "arduino_test.cpp"),
         *[str(arduino / source) for source in
           ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
+        *c_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+    executable = output / "network-details.exe"
+    subprocess.run([
+        options.cxx, "-std=c++17", "-Wall", "-Wextra",
+        "-I" + str(HERE / "network_fakes"), "-I" + str(arduino),
+        str(HERE / "network_details_test.cpp"),
+        *[str(arduino / source) for source in ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
         *c_objects, "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)

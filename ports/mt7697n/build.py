@@ -224,6 +224,18 @@ def main():
         raise SystemExit("Unexpected unresolved ELF symbols:\n" + undefined)
     binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
+    if options.platform:
+        symbols = {}
+        for line in command("arm-none-eabi-nm", ["-n", elf.as_posix()]).splitlines():
+            fields = line.split()
+            if len(fields) == 3:
+                symbols[fields[2]] = int(fields[0], 16)
+        # Runtime image reporting uses the linker extent, so verify it against
+        # the artifact, including copied data and executable SRAM sections.
+        image_extent = symbols["__exidx_end"] - symbols["__FLASH_segment_start__"]
+        if image_extent != binary.stat().st_size:
+            binary.unlink()
+            raise SystemExit("Runtime image extent does not match binary length")
     size = command("arm-none-eabi-size", [elf.as_posix()])
     print(size)
     metadata = {

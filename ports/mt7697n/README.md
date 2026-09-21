@@ -150,6 +150,12 @@ functions and native station hooks. This does not compile the full application.
 Current integration: `../../../../RnD/native-core-integration.md`.
 # Full application build status
 
+Native reset/restart, heap/stack/image reporting, identity and station
+metadata/DNS helpers are now implemented. Eight C++ host suites pass. The full
+application still has unported command, settings-reset, NTP, PWM and OTA paths.
+DNS currently uses lwIP's retry timeout rather than the configurable core
+timeout. Crash capture is explicitly unavailable on this target.
+
 `python build.py --application --compiler gcc13-sdk-runtime` now preprocesses
 and compiles the active Tasmota sketch. **This target does not yet compile
 successfully**: native system reporting, remaining Wi-Fi helpers and OTA

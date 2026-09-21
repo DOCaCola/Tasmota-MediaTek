@@ -43,6 +43,7 @@
 #ifdef TASMOTA_PLATFORM_MT7697N
 #include <LWiFi.h>
 #include <WiFiUdp.h>
+#include "platform/system.h"
 #else
 #include <WiFiHelper.h>
 #include <ESP8266HTTPClient.h>              // Ota

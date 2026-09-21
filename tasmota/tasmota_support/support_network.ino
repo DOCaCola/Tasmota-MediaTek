@@ -119,11 +119,19 @@ String NetworkMacAddress(void) {
   }
 #endif
 #endif
+#ifdef TASMOTA_PLATFORM_MT7697N
+  return WifiMacAddress();
+#else
   return WiFiHelper::macAddress();
+#endif
 }
 
 String NetworkUniqueId(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  String unique_id = WifiMacAddress();
+#else
   String unique_id = WiFiHelper::macAddress();
+#endif
   unique_id.replace(":", "");  // Full 12 chars MAC address as ID
   return unique_id;
 }
