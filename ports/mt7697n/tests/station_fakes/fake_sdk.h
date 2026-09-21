@@ -11,6 +11,7 @@
 #define WIFI_ENCRYPT_TYPE_AES_ENABLED 3
 #define ERR_OK 0
 #define NETIF_TYPE_STA 0
+#define STA_IP_MODE_DHCP 1
 struct ip_addr_t { uint32_t addr; };
 extern const ip_addr_t zero_ip;
 #define IP4_ADDR_ANY (&zero_ip)
@@ -23,6 +24,8 @@ bool wifi_ready();
 int wifi_config_set_radio(uint8_t);
 int wifi_config_get_opmode(uint8_t*);
 int wifi_config_set_opmode(uint8_t);
+int wifi_config_set_ip_mode(uint8_t);
+int wifi_connection_inform_ip_ready();
 int wifi_connection_disconnect_ap();
 int wifi_config_set_ssid(uint8_t,uint8_t*,uint8_t);
 int wifi_config_set_security_mode(uint8_t,int,int);

@@ -6,6 +6,7 @@
 #include <stdio.h>
 extern "C" {
 #include <wifi_api.h>
+#include <wifi_private_api.h>
 #include <ethernetif.h>
 #include <lwip/netif.h>
 #include <lwip/dhcp.h>
@@ -18,6 +19,7 @@ namespace {
 SdkNetworkDriver station_driver;
 Network station_network(station_driver);
 bool started = false;
+bool ip_ready_notified = false;
 // Owned by the TCP/IP task, independently of the SDK's netif link flag.
 bool dhcp_running = false;
 // Main-task requests are serialized through the TCP/IP mailbox. No Arduino
@@ -77,7 +79,12 @@ Network& station() { return station_network; }
 bool station_start(const char* ssid, const char* password) {
   const bool initialized = wifi_ready();
   started = false;
+  ip_ready_notified = false;
   init_global_connsys();
+  // The Arduino BSP initializes this to STATIC. That makes the supplicant
+  // release radio acquisition privilege before DHCP has received its offer.
+  // Keep the driver in DHCP mode and signal IP-ready only after a bound lease.
+  if (wifi_config_set_ip_mode(STA_IP_MODE_DHCP) < 0) return false;
   uint8_t mode = WIFI_MODE_STA_ONLY;
   if (wifi_config_get_opmode(&mode) < 0) return false;
   // Preserve the setup AP while explicitly testing new station credentials.
@@ -104,6 +111,7 @@ bool station_start(const char* ssid, const char* password) {
 }
 bool station_stop() {
   started = false;
+  ip_ready_notified = false;
   if (!wifi_ready()) return true;
   uint8_t mode = WIFI_MODE_STA_ONLY;
   if (wifi_config_get_opmode(&mode) < 0) return false;
@@ -117,7 +125,17 @@ bool station_online() {
   const bool connected = wifi_connection_get_link_status(&link) >= 0 &&
       link == WIFI_STATUS_LINK_CONNECTED;
   bool online = false;
-  return interface_request(connected, false, &online) && online;
+  if (!interface_request(connected, false, &online) || !online) {
+    ip_ready_notified = false;
+    return false;
+  }
+  if (!ip_ready_notified) {
+    const int result = wifi_connection_inform_ip_ready();
+    printf("NET: station lease bound, radio IP-ready result=%d\n",result);
+    if (result < 0) return false;
+    ip_ready_notified = true;
+  }
+  return true;
 }
 bool SdkNetworkDriver::start(const char* ssid, const char* password) {
   return station_start(ssid, password);

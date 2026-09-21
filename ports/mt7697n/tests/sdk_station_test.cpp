@@ -11,6 +11,7 @@ static int fail_call=0, calls=0, dhcp_calls=0, dhcp_error=0, mailbox_error=0;
 static uint8_t link_status=0;
 static uint8_t radio_mode=WIFI_MODE_STA_ONLY;
 static bool mode_query_error=false;
+static int driver_ip_mode=0,ready_calls=0,ready_result=0;
 static std::string sequence;
 static int operation(char code) { sequence+=code; return ++calls==fail_call ? -1 : 0; }
 namespace mt7697 { bool apply_setup_ap() {
@@ -20,6 +21,15 @@ extern "C" {
 const ip_addr_t zero_ip{};
 void init_global_connsys() { initialized=true; }
 bool wifi_ready() { return initialized; }
+int wifi_config_set_ip_mode(uint8_t mode) {
+  assert(mode==STA_IP_MODE_DHCP);
+  int result=operation('I');if(result==0)driver_ip_mode=mode;return result;
+}
+int wifi_connection_inform_ip_ready() {
+  assert(!tcpip && driver_ip_mode==STA_IP_MODE_DHCP);
+  assert(iface.lease && iface.ip_addr.addr);
+  ++ready_calls;return ready_result;
+}
 int wifi_config_get_opmode(uint8_t* mode) {*mode=radio_mode;return mode_query_error?-1:0;}
 int wifi_config_set_opmode(uint8_t mode) {
   int result=operation('M');if(result==0)radio_mode=mode;return result;
@@ -34,7 +44,7 @@ int wifi_config_set_security_mode(uint8_t port,int auth,int encryption) {
       (auth==WIFI_AUTH_MODE_OPEN && encryption==WIFI_ENCRYPT_TYPE_WEP_DISABLED));return operation('A');
 }
 int wifi_config_set_wpa_psk_key(uint8_t,uint8_t*,uint8_t) {return operation('K');}
-int wifi_config_reload_setting() {return operation('R');}
+int wifi_config_reload_setting() {assert(driver_ip_mode==STA_IP_MODE_DHCP);return operation('R');}
 int wifi_connection_get_link_status(uint8_t* value) {*value=link_status;return 0;}
 netif* netif_find_by_type(int) {assert(tcpip);return missing?nullptr:&iface;}
 void netif_set_link_down(netif* n) {assert(tcpip);n->link=false;}
@@ -59,21 +69,24 @@ int main() {
   using namespace mt7697;
   assert(station_stop()); // no radio call before initialization
   assert(sequence.empty());
-  assert(station_start("router","password"));assert(sequence=="SAKR");
+  assert(station_start("router","password"));assert(sequence=="ISAKR");
   assert(!station_online() && dhcp_calls==0);
+  assert(ready_calls==0);
   link_status=1;assert(!station_online() && dhcp_calls==1);
   assert(!station_online() && dhcp_calls==1); // no DHCP restart per poll
+  assert(ready_calls==0); // association/discovery is not IP-ready
   iface.ip_addr.addr=123;iface.lease=true;assert(station_online());
+  assert(ready_calls==1);assert(station_online() && ready_calls==1);
   // New credentials never inherit a previous lease, even for the same SSID.
   assert(station_start("router","wrong-pass"));assert(!station_online());
   assert(iface.ip_addr.addr==0 && !iface.lease);
   link_status=1;assert(!station_online());iface.ip_addr.addr=456;iface.lease=true;
   assert(station_online());link_status=0;assert(!station_online());
   assert(iface.ip_addr.addr==0 && !iface.link);
-  sequence.clear();assert(station_start("open",""));assert(sequence=="DSAR");
+  sequence.clear();assert(station_start("open",""));assert(sequence=="IDSAR");
   assert(station_stop());assert(!station_online());
   // Every configuration error blocks success and can be cleaned up.
-  for (int i=1;i<=5;++i) {
+  for (int i=1;i<=6;++i) {
     calls=0;fail_call=i;assert(!station_start("router","password"));
     assert(!station_online());fail_call=0;assert(station_stop());
   }
@@ -84,8 +97,8 @@ int main() {
   radio_mode=WIFI_MODE_AP_ONLY;sequence.clear();
   assert(station_stop() && sequence.empty()); // no unsupported disconnect in AP-only
   assert(station_start("trial","password"));
-  assert(radio_mode==WIFI_MODE_REPEATER && sequence=="MPDSAKR");
-  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=1;
+  assert(radio_mode==WIFI_MODE_REPEATER && sequence=="IMPDSAKR");
+  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=2;
   assert(!station_start("trial","password") && radio_mode==WIFI_MODE_AP_ONLY);
   fail_call=0;mode_query_error=true;
   assert(!station_start("trial","password") && !station_stop());
@@ -100,8 +113,14 @@ int main() {
   iface.link=true;link_status=1;
   assert(!station_online() && dhcp_calls==before+2);
   // Failed AP restoration must never reload a default-named hotspot.
-  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=2;sequence.clear();
-  assert(!station_start("trial","password") && sequence=="MP");
+  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=3;sequence.clear();
+  assert(!station_start("trial","password") && sequence=="IMP");
   fail_call=0;
+  assert(station_start("router","password"));link_status=1;
+  assert(!station_online());iface.ip_addr.addr=789;iface.lease=true;
+  const int notified=ready_calls;ready_result=-1;
+  assert(!station_online() && ready_calls==notified+1);
+  ready_result=0;assert(station_online() && ready_calls==notified+2);
+  assert(station_online() && ready_calls==notified+2);
   puts("SDK station: thread ownership, fresh leases, WPA2/AES, failure paths passed");
 }
