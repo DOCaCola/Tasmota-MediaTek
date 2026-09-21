@@ -28,13 +28,19 @@ void NativeAPNetif(void* context) {
   sys_sem_signal(&request.completed);
 }
 void NativeWifiAPCleanup() {
-  if (wifi_config_set_radio(0)<0 || wifi_config_set_opmode(WIFI_MODE_STA_ONLY)<0)
+  const int mode=wifi_config_set_opmode(WIFI_MODE_STA_ONLY);
+  const int radio=wifi_config_set_radio(0);
+  if (mode<0 || radio<0)
     AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Failed to stop setup AP; restart required"));
 }
 bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
+  AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio init, reset %s, heap %u, stack %u"),
+    mt7697::reset_reason_text(),mt7697::free_heap(),mt7697::stack_low_water_bytes());
   init_global_connsys();
+  AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio ready; configuring AP+STA"));
   const auto configure=[&]() {
-    if (wifi_config_set_radio(0)<0 || wifi_config_set_opmode(WIFI_MODE_REPEATER)<0 ||
+    // Mode changes start the AP immediately, so the radio must be running.
+    if (wifi_config_set_radio(1)<0 || wifi_config_set_opmode(WIFI_MODE_REPEATER)<0 ||
         wifi_config_set_ssid(WIFI_PORT_AP,reinterpret_cast<uint8_t*>(const_cast<char*>(name)),strlen(name))<0 ||
         wifi_config_set_channel(WIFI_PORT_AP,channel)<0) return false;
     const bool secured=passphrase && passphrase[0];
@@ -43,9 +49,10 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
         secured?WIFI_ENCRYPT_TYPE_AES_ENABLED:WIFI_ENCRYPT_TYPE_WEP_DISABLED)<0) return false;
     if (secured && wifi_config_set_wpa_psk_key(WIFI_PORT_AP,
         reinterpret_cast<uint8_t*>(const_cast<char*>(passphrase)),strlen(passphrase))<0) return false;
-    return wifi_config_reload_setting()>=0 && wifi_config_set_radio(1)>=0;
+    return wifi_config_reload_setting()>=0;
   };
   if (!configure()) { NativeWifiAPCleanup(); return false; }
+  AddLog(LOG_LEVEL_INFO,PSTR("WIF: AP+STA configured; starting IP services"));
   NativeAPContext request={netif_find_by_type(NETIF_TYPE_AP),{}};
   if (!request.ap || sys_sem_new(&request.completed,0)!=ERR_OK) {
     NativeWifiAPCleanup(); return false;

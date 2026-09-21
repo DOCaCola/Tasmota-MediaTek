@@ -9,7 +9,16 @@ extern "C" {
 #include <hal_flash.h>
 #include <hal_uart.h>
 #include <hal_pwm.h>
+#include <syslog.h>
+LOG_CONTROL_BLOCK_DECLARE(wifi);
+LOG_CONTROL_BLOCK_DECLARE(common);
 }
+
+static log_control_block_t* native_log_modules[] = {
+  &LOG_CONTROL_BLOCK_SYMBOL(wifi),
+  &LOG_CONTROL_BLOCK_SYMBOL(common),
+  nullptr
+};
 
 extern "C" void init_system() {
 #ifdef TASMOTA_PLATFORM_MT7697N
@@ -19,6 +28,10 @@ extern "C" void init_system() {
   cmnCpuClkConfigureTo192M();
   cmnSerialFlashClkConfTo64M();
   hal_flash_init();
+  // Keep the BSP's diagnostic service: radio initialization and exception
+  // handlers otherwise lose the messages needed to diagnose hardware faults.
+  log_uart_init(HAL_UART_0);
+  log_init(nullptr, nullptr, native_log_modules);
   // GPIO ownership is deferred to the selected application/probe.
 }
 
