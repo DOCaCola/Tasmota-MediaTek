@@ -226,6 +226,7 @@ def main():
     if options.platform and not options.application:
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
     if options.platform:
+        link += ["-Wl,--wrap=wifi_init"]
         link += ["-Wl,--undefined=mt7697_ota_link_check"]
     if options.application:
         link += ["-Wl,--undefined=mt7697_image_identity"]

@@ -31,6 +31,12 @@ if __name__ == "__main__":
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
     subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
+    executable = output / "wifi-country.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(HERE / "country_fakes"),
+                    str(HERE / "wifi_country_test.cpp"), str(PORT / "platform/wifi_country.cpp"),
+                    "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
     bear = PORT.parents[1] / "lib/lib_ssl/bearssl-esp8266/src"
     sha_objects = []
     for source in ("hash/sha1.c", "codec/enc32be.c", "codec/dec32be.c"):

@@ -9,6 +9,19 @@ The separate probe targets remain SDK integration checks. No ESP8266/ESP32 macro
 
 ## Reproduce on Windows
 
+Radio country is a build-time setting in `port_config.h`:
+
+```cpp
+#define MT7697_WIFI_COUNTRY "DE"
+```
+
+Use a two-letter uppercase country supported by the MediaTek SDK. The default
+is Germany for this lamp. The native application/platform build passes it to
+the SDK before Wi-Fi initializes, preserving other initialization options.
+It does not change eFuses and is independent of language/timezone. Rebuild
+after changing it; there is no runtime country command. The older standalone
+SDK/network probes do not use this native platform setting.
+
 Python 3.12+ is required for safe archive extraction. From this directory:
 
 ```text
