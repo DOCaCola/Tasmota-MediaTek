@@ -37,7 +37,7 @@ int main() {
   assert(!mt7697::prepare_setup_ap("lamp", "", 14));
   assert(mt7697::prepare_setup_ap("tasmota-test", "", 6));
   __wrap_wifi_init(&config, &extended);
-  assert(config.opmode==WIFI_MODE_REPEATER && config.ap_config.channel==6);
+  assert(config.opmode==WIFI_MODE_AP_ONLY && config.ap_config.channel==6);
   assert(config.ap_config.ssid_length==12 && !memcmp(config.ap_config.ssid,"tasmota-test",12));
   assert(config.ap_config.auth_mode==WIFI_AUTH_MODE_OPEN && !config.ap_config.password_length);
   assert(captured.ap_hidden_ssid_enable_present && !captured.ap_hidden_ssid_enable);

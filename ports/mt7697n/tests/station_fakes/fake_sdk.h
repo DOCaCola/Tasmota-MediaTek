@@ -1,6 +1,9 @@
 #pragma once
 #include <stdint.h>
 #define WIFI_PORT_STA 0
+#define WIFI_MODE_STA_ONLY 1
+#define WIFI_MODE_AP_ONLY 2
+#define WIFI_MODE_REPEATER 3
 #define WIFI_STATUS_LINK_CONNECTED 1
 #define WIFI_AUTH_MODE_OPEN 0
 #define WIFI_AUTH_MODE_WPA2_PSK 6
@@ -17,6 +20,8 @@ typedef int sys_sem_t;
 void init_global_connsys();
 bool wifi_ready();
 int wifi_config_set_radio(uint8_t);
+int wifi_config_get_opmode(uint8_t*);
+int wifi_config_set_opmode(uint8_t);
 int wifi_connection_disconnect_ap();
 int wifi_config_set_ssid(uint8_t,uint8_t*,uint8_t);
 int wifi_config_set_security_mode(uint8_t,int,int);

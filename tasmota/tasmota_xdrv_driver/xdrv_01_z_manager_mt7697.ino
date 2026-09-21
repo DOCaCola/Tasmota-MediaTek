@@ -69,10 +69,12 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
   const bool first_init=!wifi_ready();
   if (first_init && !mt7697::prepare_setup_ap(name,passphrase?passphrase:"",channel)) return false;
   init_global_connsys();
-  AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio ready; configuring AP+STA"));
+  AddLog(LOG_LEVEL_INFO,PSTR("WIF: Radio ready; configuring setup AP"));
   const auto configure=[&]() {
     // Mode changes start the AP immediately, so the radio must be running.
-    if (wifi_config_set_radio(1)<0 || wifi_config_set_opmode(WIFI_MODE_REPEATER)<0 ||
+    // Idle setup must not restart the saved station connection on reload.
+    // AP+STA is enabled only for an explicit credential trial.
+    if (wifi_config_set_opmode(WIFI_MODE_AP_ONLY)<0 ||
         wifi_config_set_ssid(WIFI_PORT_AP,reinterpret_cast<uint8_t*>(const_cast<char*>(name)),strlen(name))<0 ||
         wifi_config_set_channel(WIFI_PORT_AP,channel)<0) return false;
     const bool secured=passphrase && passphrase[0];
@@ -84,7 +86,7 @@ bool NativeWifiStartAP(const char* name, const char* passphrase, int channel) {
     return wifi_config_reload_setting()>=0;
   };
   if (!first_init && !configure()) { NativeWifiAPCleanup(); return false; }
-  AddLog(LOG_LEVEL_INFO,PSTR("WIF: AP+STA configured; starting IP services"));
+  AddLog(LOG_LEVEL_INFO,PSTR("WIF: AP-only configured; starting IP services"));
   NativeAPContext request={netif_find_by_type(NETIF_TYPE_AP),{}};
   if (!request.ap || sys_sem_new(&request.completed,0)!=ERR_OK) {
     NativeWifiAPCleanup(); return false;
@@ -170,14 +172,10 @@ void NativeWifiTestDiscard() {
   memset(native_test_password,0,sizeof(native_test_password));
 }
 void NativeWifiTestRecoverAP() {
-  // Changing modes resets the SDK's continuing connection attempts. Reapply
-  // the complete AP configuration and its IP services, retaining web routes.
+  // Remove the trial station and restore AP-only operation and IP services.
   const bool stopped=mt7697::station_stop();
   dhcpd_stop();
-  // station_stop leaves the shared radio running; set_radio is unsupported
-  // in repeater mode. Switch modes before NativeWifiStartAP enables STA radio.
-  if (!stopped || wifi_config_set_opmode(WIFI_MODE_STA_ONLY)<0 ||
-      !NativeWifiStartAP(native_ap_name,native_ap_password,native_ap_channel)) {
+  if (!stopped || !NativeWifiStartAP(native_ap_name,native_ap_password,native_ap_channel)) {
     AddLog(LOG_LEVEL_ERROR,PSTR("WIF: Setup AP recovery failed; restart required"));
   }
 }

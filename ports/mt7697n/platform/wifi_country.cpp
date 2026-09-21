@@ -40,7 +40,7 @@ void __wrap_wifi_init(wifi_config_t* config, wifi_config_ext_t* extended) {
   native.country_code[2] = native.country_code[3] = 0;
   if (startup_ap_pending) {
     // Update the caller's mode too: the BSP passes it to lwip_tcpip_init next.
-    config->opmode=WIFI_MODE_REPEATER;
+    config->opmode=WIFI_MODE_AP_ONLY;
     config->ap_config=startup_ap;
     native.ap_hidden_ssid_enable_present=1;
     native.ap_hidden_ssid_enable=0;

@@ -61,6 +61,12 @@ bool station_start(const char* ssid, const char* password) {
   const bool initialized = wifi_ready();
   started = false;
   init_global_connsys();
+  uint8_t mode = WIFI_MODE_STA_ONLY;
+  if (wifi_config_get_opmode(&mode) < 0) return false;
+  // Preserve the setup AP while explicitly testing new station credentials.
+  // Outside a trial the manager uses AP-only, with no station scan retries.
+  if (mode == WIFI_MODE_AP_ONLY &&
+      wifi_config_set_opmode(WIFI_MODE_REPEATER) < 0) return false;
   // Disconnect the station without cycling the shared radio. In this SDK the
   // disconnect implementation explicitly handles modes 1 and 3; set_radio
   // rejects mode 3. A fresh initialization has no association to disconnect.
@@ -81,7 +87,10 @@ bool station_start(const char* ssid, const char* password) {
 bool station_stop() {
   started = false;
   if (!wifi_ready()) return true;
-  const bool disconnected = wifi_connection_disconnect_ap() >= 0;
+  uint8_t mode = WIFI_MODE_STA_ONLY;
+  if (wifi_config_get_opmode(&mode) < 0) return false;
+  const bool disconnected = mode == WIFI_MODE_AP_ONLY ||
+      wifi_connection_disconnect_ap() >= 0;
   return interface_request(false, true) && disconnected;
 }
 bool station_online() {

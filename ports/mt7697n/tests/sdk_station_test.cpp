@@ -9,12 +9,18 @@ static netif iface{};
 static bool initialized=false, tcpip=false, missing=false;
 static int fail_call=0, calls=0, dhcp_calls=0, dhcp_error=0, mailbox_error=0;
 static uint8_t link_status=0;
+static uint8_t radio_mode=WIFI_MODE_STA_ONLY;
+static bool mode_query_error=false;
 static std::string sequence;
 static int operation(char code) { sequence+=code; return ++calls==fail_call ? -1 : 0; }
 extern "C" {
 const ip_addr_t zero_ip{};
 void init_global_connsys() { initialized=true; }
 bool wifi_ready() { return initialized; }
+int wifi_config_get_opmode(uint8_t* mode) {*mode=radio_mode;return mode_query_error?-1:0;}
+int wifi_config_set_opmode(uint8_t mode) {
+  int result=operation('M');if(result==0)radio_mode=mode;return result;
+}
 int wifi_config_set_radio(uint8_t on) {
   (void)on;assert(false && "Station lifecycle must not toggle shared radio");return -1;
 }
@@ -72,5 +78,14 @@ int main() {
   mailbox_error=1;assert(!station_start("router","password"));mailbox_error=0;
   assert(station_start("router","password"));link_status=1;dhcp_error=-1;
   assert(!station_online() && !iface.link);dhcp_error=0;assert(!station_online() && iface.link);
+  radio_mode=WIFI_MODE_AP_ONLY;sequence.clear();
+  assert(station_stop() && sequence.empty()); // no unsupported disconnect in AP-only
+  assert(station_start("trial","password"));
+  assert(radio_mode==WIFI_MODE_REPEATER && sequence=="MDSAKR");
+  radio_mode=WIFI_MODE_AP_ONLY;calls=0;fail_call=1;
+  assert(!station_start("trial","password") && radio_mode==WIFI_MODE_AP_ONLY);
+  fail_call=0;mode_query_error=true;
+  assert(!station_start("trial","password") && !station_stop());
+  mode_query_error=false;
   puts("SDK station: thread ownership, fresh leases, WPA2/AES, failure paths passed");
 }
