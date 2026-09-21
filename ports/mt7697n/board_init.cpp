@@ -7,12 +7,14 @@
 extern "C" {
 #include <top.h>
 #include <hal_flash.h>
+#include <spi_flash.h>
 #include <hal_uart.h>
 #include <hal_pwm.h>
 #include <syslog.h>
 #include <exception_handler.h>
 LOG_CONTROL_BLOCK_DECLARE(wifi);
 LOG_CONTROL_BLOCK_DECLARE(common);
+extern const struct chip_info* spi_chip_info;
 }
 
 static log_control_block_t* native_log_modules[] = {
@@ -39,6 +41,27 @@ static void fault_hex(unsigned value) {
     hal_uart_put_char(HAL_UART_0, digit < 10 ? '0' + digit : 'a' + digit - 10);
   }
   hal_uart_put_char(HAL_UART_0, ' ');
+}
+
+// Read-only bring-up evidence, collected before Wi-Fi/tasks use the SFC.
+// Report the physical JEDEC response separately from the SDK's selected table.
+static void flash_report(hal_flash_status_t initialized) {
+  const char* label = "\r\nFLASH init, JEDEC read result, JEDEC bytes, SDK id/jedec/capacity:\r\n";
+  while (*label) hal_uart_put_char(HAL_UART_0, *label++);
+  fault_hex(static_cast<unsigned>(initialized));
+  if (initialized == HAL_FLASH_STATUS_OK) {
+    unsigned char id[3] = {};
+    const int count = flash_read_jedec_id(id, sizeof(id));
+    fault_hex(static_cast<unsigned>(count));
+    for (unsigned char byte : id) fault_hex(byte);
+    if (spi_chip_info) {
+      fault_hex(spi_chip_info->id);
+      fault_hex(spi_chip_info->jedec_id);
+      fault_hex(spi_chip_info->page_size * spi_chip_info->n_pages);
+    }
+  }
+  hal_uart_put_char(HAL_UART_0, '\r');
+  hal_uart_put_char(HAL_UART_0, '\n');
 }
 
 static void fault_report() {
@@ -71,13 +94,14 @@ extern "C" void init_system() {
   top_xtal_init();
   cmnCpuClkConfigureTo192M();
   cmnSerialFlashClkConfTo64M();
-  hal_flash_init();
+  const auto flash_initialized = hal_flash_init();
   exception_config_type fault_callbacks = {fault_report, nullptr};
   exception_register_callbacks(&fault_callbacks);
   // Keep the BSP's diagnostic service: radio initialization and exception
   // handlers otherwise lose the messages needed to diagnose hardware faults.
   boot_uart_owned = log_uart_init(HAL_UART_0) == HAL_UART_STATUS_OK;
   log_init(nullptr, nullptr, native_log_modules);
+  flash_report(flash_initialized);
   // GPIO ownership is deferred to the selected application/probe.
 }
 
