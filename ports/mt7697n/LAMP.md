@@ -3,6 +3,13 @@
 The native build enables Tasmota's CCT engine and XLGT12, a board-specific
 output driver. Generic GPIO/PWM reassignment remains disabled.
 
+**Investigation correction:** the stock product's transition controller sets
+minimum brightness15 before daylight conversion (night0). This driver currently
+uses0. The exhaustive comparison described below validates that isolated
+converter configuration, not the complete stock request-to-output path. See
+`RnD/stock-fade-investigation.md` in the workspace. Duty-space stock fades and
+separate day/night brightness retention are also not implemented.
+
 - `Power`, `Dimmer`, `CT`, `Fade`, `Speed` use standard Tasmota behavior.
 - Physical temperature range is 2700–6500 K (CT 153–370, endpoint clamped).
 - `LampNight 0` selects daylight; `LampNight 1` selects night mode.
