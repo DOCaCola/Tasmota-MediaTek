@@ -1,7 +1,9 @@
-"""Build the pinned LinkIt BSP probe; this script never uploads firmware."""
+"""Build native MT7697 probes or the Tasmota application; never upload firmware."""
 import hashlib
 import argparse
 import json
+import os
+from sketch import add_prototypes
 from pathlib import Path
 import subprocess
 import sys
@@ -37,10 +39,19 @@ def main():
                         help="Also link Tasmota MQTT and SDK runtime checks (requires gcc13-sdk-runtime)")
     parser.add_argument("--platform", action="store_true",
                         help="Link native network/settings services; no flash writes are invoked")
+    parser.add_argument("--application", action="store_true", help="Build the complete native Tasmota application")
+    parser.add_argument("--ctags", type=Path,
+                        default=Path(os.environ.get("LOCALAPPDATA", ".")) /
+                        "Arduino15/packages/builtin/tools/ctags/5.8-arduino11/ctags.exe",
+                        help="Arduino ctags executable for application declarations")
     parser.add_argument("--layout", choices=["sdk", "lamp"], default="sdk")
     parser.add_argument("--compiler", choices=["legacy", "gcc10", "gcc13", "gcc13-sdk-runtime"],
                         default="legacy", help="Experimental compiler/runtime selection.")
     options = parser.parse_args()
+    if options.application:
+        if not options.ctags.is_file():
+            parser.error("--application requires Arduino ctags; supply its path with --ctags")
+        options.platform = True
     if options.platform:
         options.dependencies = True
     if options.dependencies:
@@ -57,6 +68,8 @@ def main():
         BUILD = HERE / "build/dependency-probe"
     if options.platform:
         BUILD = HERE / "build/platform-probe"
+    if options.application:
+        BUILD = HERE / "build/tasmota"
     if options.compiler in ("gcc13", "gcc13-sdk-runtime"):
         TOOLS = WORK / "vendor/modern-toolchain/xpack-arm-none-eabi-gcc-13.3.1-1.1/bin"
         BUILD = BUILD.with_name(BUILD.name + "-" + options.compiler)
@@ -64,8 +77,9 @@ def main():
         TOOLS = WORK / "vendor/gcc10/xpack-arm-none-eabi-gcc-10.3.1-2.3/bin"
         BUILD = BUILD.with_name(BUILD.name + "-gcc10")
     BUILD.mkdir(parents=True, exist_ok=True)
+    artifact = "tasmota" if options.application else "sdk-probe"
     # A failed build must not leave an earlier successful firmware/result visible.
-    for name in ("sdk-probe.elf", "sdk-probe.bin", "result.json"):
+    for name in (artifact + ".elf", artifact + ".bin", "result.json"):
         (BUILD / name).unlink(missing_ok=True)
     (BUILD / "build.log").write_text("")
     properties = {}
@@ -139,10 +153,29 @@ def main():
                   "-I" + (HERE.parents[1] / "tasmota").as_posix()]
         # Keep the persistence entry points in the link without calling them.
         flags += ["-DMT7697_PLATFORM_PROBE"]
+    if options.application:
+        root = HERE.parents[1]
+        sketch = root / "tasmota"
+        sources = [p for p in sources if p.name not in
+                   ("smoke.cpp", "dependency_probe.cpp", "link_check.cpp")]
+        flags += ["-DFIRMWARE_LITE"]
+        for directory in (root / "lib/default").iterdir():
+            if directory.is_dir():
+                flags += ["-I" + (directory / "src" if (directory / "src").is_dir() else directory).as_posix()]
+        units = [sketch / "tasmota.ino"] + sorted(sketch.glob("tasmota_*/*.ino"))
+        application = BUILD / "tasmota.cpp"
+        application.write_text('#include <Arduino.h>\n' +
+                               "\n".join('#include "' + p.as_posix() + '"' for p in units))
+        sources.append(application)
+        preprocessed = BUILD / "tasmota.ii"
+        command("arm-none-eabi-g++", flags + ["-std=gnu++17", "-fno-exceptions", "-fno-rtti"] + cpp_headers + c_headers
+                + ["-E", application.as_posix(), "-o", preprocessed.as_posix()])
+        add_prototypes(preprocessed, options.ctags)
+        sources[-1] = preprocessed
     objects = []
     for i, source in enumerate(sources):
         obj = BUILD / f"{i:02d}-{source.name}.o"
-        cpp = source.suffix == ".cpp"
+        cpp = source.suffix in (".cpp", ".ii")
         standard = "-std=c++11" if options.compiler == "legacy" else "-std=gnu++17"
         language = [standard, "-fno-exceptions", "-fno-rtti"] if cpp else ["-std=gnu99"]
         command("arm-none-eabi-g++" if cpp else "arm-none-eabi-gcc",
@@ -162,7 +195,7 @@ def main():
         (system / "libs" / value).as_posix()
         for key, value in properties.items() if key.startswith("build.lib_")
     ]
-    elf = BUILD / "sdk-probe.elf"
+    elf = BUILD / (artifact + ".elf")
     linker = variant / "linkscripts/mt7687_flash.ld"
     if options.layout == "lamp":
         linker = HERE / "ylxd01yl.ld"
@@ -178,35 +211,40 @@ def main():
         "-nostartfiles",
         "-Wl,-wrap=malloc,-wrap=calloc,-wrap=realloc,-wrap=free",
         "-Wl,--check-sections,--gc-sections",
-        "-T" + linker.as_posix(), "-Wl,-Map," + (BUILD / "sdk-probe.map").as_posix(),
+        "-T" + linker.as_posix(), "-Wl,-Map," + (BUILD / (artifact + ".map")).as_posix(),
         "-Wl,-u,_printf_float", "-o", elf.as_posix(),
         "-Wl,--start-group", *objects, *libraries,
         *runtime_libraries, "-Wl,--end-group",
     ]
-    if options.platform:
+    if options.platform and not options.application:
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
     command("arm-none-eabi-gcc", link)
     undefined = command("arm-none-eabi-nm", ["-u", elf.as_posix()])
     if undefined.strip():
         raise SystemExit("Unexpected unresolved ELF symbols:\n" + undefined)
-    binary = BUILD / "sdk-probe.bin"
+    binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
     size = command("arm-none-eabi-size", [elf.as_posix()])
     print(size)
     metadata = {
-        "target": ("YLXD01YL serial/PWM build candidate; not hardware validated"
+        "target": ("Native Tasmota SDK-layout candidate; not hardware validated"
+                   if options.application else
+                   "YLXD01YL serial/PWM build candidate; not hardware validated"
                    if options.layout == "lamp" else
                    "LinkIt SDK layout probe; not a lamp flash image"),
         "compiler": command("arm-none-eabi-gcc", ["--version"]).splitlines()[0],
         "runtime": "SDK GCC 4.8.3 nano C/C++ headers and libraries" if sdk_runtime else "compiler bundled",
         "language": "c++11" if options.compiler == "legacy" else "gnu++17",
         "hardware_validated": False,
-        "dependencies_probe": options.dependencies,
-        "platform_probe": options.platform,
+        "application": options.application,
+        "dependencies_probe": options.dependencies and not options.application,
+        "platform_probe": options.platform and not options.application,
         "binary_bytes": binary.stat().st_size,
         "sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "source_files": len(sources),
     }
+    if options.application:
+        metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()
     if sdk_runtime:
         metadata["runtime_archives"] = {
             str(Path(path).relative_to(WORK)): hashlib.sha256(Path(path).read_bytes()).hexdigest()

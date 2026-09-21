@@ -148,3 +148,18 @@ assertions and syntax-checks the core-hook fixtures using the ARM compiler.
 The host test runner executes five suites, including actual core save/load
 functions and native station hooks. This does not compile the full application.
 Current integration: `../../../../RnD/native-core-integration.md`.
+# Full application build status
+
+`python build.py --application --compiler gcc13-sdk-runtime` now preprocesses
+and compiles the active Tasmota sketch. **This target does not yet compile
+successfully**: native system reporting, remaining Wi-Fi helpers and OTA
+integration are outstanding. Successful probe builds remain probes.
+
+The application build requires Arduino ctags 5.8-arduino11. Use `--ctags PATH`
+when it is not installed in the standard Windows Arduino15 tools directory.
+Generated declarations use active preprocessed code and preserve source
+locations. Application artifacts are named `tasmota.elf` and `tasmota.bin`;
+failed builds remove stale application outputs.
+
+The native board template leaves all lamp outputs unassigned. No image from
+this stage is a validated lamp installation image.

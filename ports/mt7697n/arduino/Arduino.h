@@ -25,6 +25,17 @@
 #include <string.h>
 #include <math.h>
 #include "binary.h"
+#include "itoa.h"
+#include "dtostrf.h"
+#ifdef __cplusplus
+#include <cmath>
+using std::isnan;
+using std::isinf;
+#endif
+
+// The SDK startup copies .ramTEXT into executable SRAM.
+#define IRAM_ATTR __attribute__((section(".ramTEXT")))
+#define FPSTR(p) (reinterpret_cast<const __FlashStringHelper *>(p))
 
 // For CPP Header
 // ====== For Some Peripheral ==================================================

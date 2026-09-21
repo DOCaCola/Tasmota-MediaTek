@@ -187,6 +187,7 @@ void UARTClass::init(const uint32_t dwBaudRate, const uint32_t modeReg)
 
 	// Make sure both ring buffers are initialized back to empty.
 	_rx_buffer.clear();
+	_baudrate = dwBaudRate;
 }
 
 void UARTClass::end(void)
@@ -195,6 +196,7 @@ void UARTClass::end(void)
 	flush();
 
 	hal_uart_deinit(_uart_port);
+	_baudrate = 0;
 }
 
 int UARTClass::available(void)

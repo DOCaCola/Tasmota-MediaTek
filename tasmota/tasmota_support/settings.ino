@@ -1088,7 +1088,11 @@ void SettingsDefaultSet2(void) {
   Settings->module = MODULE;
   Settings->fallback_module = FALLBACK_MODULE;
 #endif // FIRMWARE_MINIMAL
+#ifdef TASMOTA_PLATFORM_MT7697N
+  ModuleDefault(YLXD01YL);
+#else
   ModuleDefault(WEMOS);
+#endif
 //  for (uint32_t i = 0; i < nitems(Settings->my_gp.io); i++) { Settings->my_gp.io[i] = GPIO_NONE; }
   SettingsUpdateText(SET_FRIENDLYNAME1, PSTR(FRIENDLY_NAME));
 #ifndef FIRMWARE_MINIMAL    // not needed in minimal/safeboot because of disabled feature and Settings are not saved anyways

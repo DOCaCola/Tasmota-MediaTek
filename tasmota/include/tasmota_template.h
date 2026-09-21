@@ -1621,6 +1621,17 @@ typedef struct MYTMPLT {
   gpio_flag    flag;            // 2 bytes
 } mytmplt;                      // 30 / 74 / 46 / 74 bytes
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+#define USER_MODULE 255
+enum SupportedModulesMT7697 { YLXD01YL, MAXMODULE };
+#define MODULE YLXD01YL
+#define FALLBACK_MODULE YLXD01YL
+const uint8_t kModuleNiceList[] PROGMEM = { YLXD01YL };
+const char kModuleNames[] PROGMEM = "YLXD01YL";
+// Outputs remain unassigned until Wi-Fi and remote update bring-up completes.
+const mytmplt kModules[] PROGMEM = {{{{GPIO_NONE, GPIO_NONE, GPIO_NONE}}, {0}}};
+#endif
+
 //********************************************************************************************
 
 #ifdef ESP8266

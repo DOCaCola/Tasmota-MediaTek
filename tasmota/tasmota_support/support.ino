@@ -1689,7 +1689,7 @@ void TemplateGpios(myio *gp)
 #ifdef ESP8266
     GetInternalTemplate(&src, Settings->module, 1);
 #endif  // ESP8266
-#ifdef ESP32
+#if defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
     memcpy_P(&src, &kModules[ModuleTemplate(Settings->module)].gp, sizeof(mycfgio));
 #endif  // ESP32
   }
@@ -1700,6 +1700,9 @@ void TemplateGpios(myio *gp)
   // Expand template to physical GPIO array, j=phy_GPIO, i=template_GPIO
   uint32_t j = 0;
   for (uint32_t i = 0; i < nitems(Settings->user_template.gp.io); i++) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+    dest[MT7697_TEMPLATE_TO_GPIO[i]] = src[i];
+#endif
 /*
 #if defined(ESP32) && CONFIG_IDF_TARGET_ESP32C3
     dest[i] = src[i];
@@ -1749,7 +1752,7 @@ gpio_flag ModuleFlag(void)
 #ifdef ESP8266
     GetInternalTemplate(&flag, Settings->module, 2);
 #endif  // ESP8266
-#ifdef ESP32
+#if defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
     memcpy_P(&flag, &kModules[ModuleTemplate(Settings->module)].flag, sizeof(gpio_flag));
 #endif  // ESP32
   }
@@ -1759,7 +1762,13 @@ gpio_flag ModuleFlag(void)
 
 void ModuleDefault(uint32_t module)
 {
-  if (USER_MODULE == module) { module = WEMOS; }  // Generic
+  if (USER_MODULE == module) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+    module = YLXD01YL;
+#else
+    module = WEMOS;
+#endif
+  }
   Settings->user_template_base = module;
 
 #ifdef ESP32
@@ -1771,7 +1780,7 @@ void ModuleDefault(uint32_t module)
 #ifdef ESP8266
   GetInternalTemplate(&Settings->user_template, module, 3);
 #endif  // ESP8266
-#ifdef ESP32
+#if defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
   memcpy_P(&Settings->user_template, &kModules[module], sizeof(mytmplt));
 #endif  // ESP32
 }
@@ -2133,10 +2142,21 @@ int8_t ParseSerialConfig(const char *pstr)
   return serial_config;
 }
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+const uint32_t kTasmotaSerialConfig[] PROGMEM = {
+  SERIAL_5N1, SERIAL_6N1, SERIAL_7N1, SERIAL_8N1,
+  SERIAL_5N2, SERIAL_6N2, SERIAL_7N2, SERIAL_8N2,
+  SERIAL_5E1, SERIAL_6E1, SERIAL_7E1, SERIAL_8E1,
+  SERIAL_5E2, SERIAL_6E2, SERIAL_7E2, SERIAL_8E2,
+  SERIAL_5O1, SERIAL_6O1, SERIAL_7O1, SERIAL_8O1,
+  SERIAL_5O2, SERIAL_6O2, SERIAL_7O2, SERIAL_8O2
+};
+#endif
+
 uint32_t ConvertSerialConfig(uint8_t serial_config) {
 #ifdef ESP8266
   return (uint32_t)pgm_read_byte(kTasmotaSerialConfig + serial_config);
-#elif defined(ESP32)
+#elif defined(ESP32) || defined(TASMOTA_PLATFORM_MT7697N)
   return (uint32_t)pgm_read_dword(kTasmotaSerialConfig + serial_config);
 #else
   #error "platform not supported"
@@ -2189,6 +2209,9 @@ void SetSerialBegin(void) {
   SetTasmotaGlobalBaudrate(Settings->baudrate * 300);
   AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_SERIAL "Set to %s %d bit/s"), GetSerialConfig().c_str(), TasmotaGlobal.baudrate);
   Serial.flush();
+#ifdef TASMOTA_PLATFORM_MT7697N
+  Serial.begin(TasmotaGlobal.baudrate, static_cast<UARTClass::UARTModes>(ConvertSerialConfig(Settings->serial_config)));
+#endif
 #ifdef ESP8266
   Serial.begin(TasmotaGlobal.baudrate, (SerialConfig)ConvertSerialConfig(Settings->serial_config));
   SetSerialSwap();

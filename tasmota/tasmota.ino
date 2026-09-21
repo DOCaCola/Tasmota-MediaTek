@@ -40,15 +40,22 @@
 #endif
 
 // Libraries
+#ifdef TASMOTA_PLATFORM_MT7697N
+#include <LWiFi.h>
+#include <WiFiUdp.h>
+#else
 #include <WiFiHelper.h>
 #include <ESP8266HTTPClient.h>              // Ota
 #include <ESP8266httpUpdate.h>              // Ota
+#endif
 #ifdef ESP32
 #ifdef USE_TLS
 #include "HTTPUpdateLight.h"                // Ota over HTTPS for ESP32
 #endif  // USE_TLS
 #endif  // ESP32
+#if defined(USE_WEBSERVER) || !defined(TASMOTA_PLATFORM_MT7697N)
 #include <StreamString.h>                   // Webserver, Updater
+#endif
 #include <ext_printf.h>
 #include <SBuffer.hpp>
 #include <LList.h>
@@ -66,7 +73,9 @@
 #ifdef USE_DISCOVERY
 #include <ESP8266mDNS.h>                    // MQTT, Webserver, Arduino OTA
 #endif  // USE_DISCOVERY
+#if defined(USE_I2C) || !defined(TASMOTA_PLATFORM_MT7697N)
 #include <Wire.h>                           // I2C support library
+#endif
 #ifdef USE_SPI
 #include <SPI.h>                            // SPI support, TFT, SDcard
 #endif  // USE_SPI
@@ -249,6 +258,8 @@ bool tasconsole_serial = true;
 //#warning **** TasConsole uses Serial ****
 #endif  // ESP32C3, S2 or S3
 
+#elif defined(TASMOTA_PLATFORM_MT7697N)
+UARTClass& TasConsole = Serial;
 #else   // No ESP32
 HardwareSerial TasConsole = Serial;         // Only serial interface
 #endif  // ESP32

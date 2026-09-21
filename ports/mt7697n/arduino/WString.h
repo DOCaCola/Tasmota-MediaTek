@@ -200,7 +200,9 @@ protected:
 	void init(void);
 	void invalidate(void);
 	unsigned char changeBuffer(unsigned int maxStrLen);
+public:
 	unsigned char concat(const char *cstr, unsigned int length);
+protected:
 
 	// copy and move
 	String & copy(const char *cstr, unsigned int length);

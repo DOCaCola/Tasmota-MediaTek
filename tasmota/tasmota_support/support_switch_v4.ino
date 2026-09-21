@@ -59,11 +59,11 @@ struct SWITCH {
 
 /********************************************************************************************/
 
-void SwitchPullupFlag(uint32 switch_bit) {
+void SwitchPullupFlag(uint32_t switch_bit) {
   bitSet(Switch.no_pullup_mask, switch_bit);
 }
 
-void SwitchPulldownFlag(uint32 switch_bit) {
+void SwitchPulldownFlag(uint32_t switch_bit) {
   bitSet(Switch.pulldown_mask, switch_bit);
 }
 

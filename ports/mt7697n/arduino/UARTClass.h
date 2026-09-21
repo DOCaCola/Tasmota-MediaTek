@@ -101,6 +101,7 @@ class UARTClass : public HardwareSerial
 		void begin(const uint32_t dwBaudRate);
 		void begin(const uint32_t dwBaudRate, const UARTModes config);
 		void end(void);
+		uint32_t baudRate() const { return _baudrate; }
 		int available(void);
 		int peek(void);
 		int read(void);
@@ -119,6 +120,7 @@ class UARTClass : public HardwareSerial
 		void init(const uint32_t dwBaudRate, const uint32_t config);
 
 		hal_uart_port_t	_uart_port;
+		uint32_t _baudrate = 0;
 		arduino_pin_t	_uart_pin_rx;
 		arduino_pin_t	_uart_pin_tx;
 

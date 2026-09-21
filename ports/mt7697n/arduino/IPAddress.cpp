@@ -17,9 +17,29 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 
-#include "Arduino.h"
 #include "IPAddress.h"
 #include "Print.h"
+
+bool IPAddress::fromString(const char *text) {
+	uint8_t parsed[4];
+	for (unsigned octet = 0; octet < 4; ++octet) {
+		unsigned value = 0;
+		unsigned digits = 0;
+		while (*text >= '0' && *text <= '9') {
+			value = value * 10 + (*text++ - '0');
+			if (++digits > 3 || value > 255) return false;
+		}
+		if (!digits) return false;
+		parsed[octet] = value;
+		if (octet < 3) {
+			if (*text++ != '.') return false;
+		} else if (*text != '\0') {
+			return false;
+		}
+	}
+	memcpy(_address.bytes, parsed, sizeof(parsed));
+	return true;
+}
 
 IPAddress::IPAddress()
 {

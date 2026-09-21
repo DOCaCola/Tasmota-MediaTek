@@ -29,6 +29,7 @@ if __name__ == "__main__":
     (output / "core_settings_functions.inc").write_text("\n\n".join(functions))
     if options.generate_only:
         sys.exit(0)
+    subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
     cases = {
         "pwm": [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"],
         "platform": [HERE / "platform_test.cpp", PORT / "platform/network.cpp",
@@ -45,3 +46,18 @@ if __name__ == "__main__":
                         "-I" + str(PORT.parents[2] / "vendor/linkit/mt7697/libraries/LWiFi/src"),
                         *map(str, sources), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
+    arduino = PORT / "arduino"
+    executable = output / "arduino.exe"
+    c_objects = []
+    for source in ("itoa.c", "dtostrf.c"):
+        obj = output / (source + ".o")
+        subprocess.run([options.cxx, "-x", "c", "-std=c99", "-Wall", "-Wextra",
+                        "-c", str(arduino / source), "-o", str(obj)], check=True)
+        c_objects.append(str(obj))
+    subprocess.run([
+        options.cxx, "-std=c++17", "-Wall", "-Wextra", "-I" + str(arduino),
+        str(HERE / "arduino_test.cpp"),
+        *[str(arduino / source) for source in
+          ("Print.cpp", "IPAddress.cpp", "WString.cpp")],
+        *c_objects, "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)

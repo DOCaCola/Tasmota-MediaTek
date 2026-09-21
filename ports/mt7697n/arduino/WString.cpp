@@ -22,6 +22,8 @@
 #include "WString.h"
 #include "itoa.h"
 #include "dtostrf.h"
+#include <limits.h>
+#include <stdint.h>
 
 /*********************************************/
 /*  Constructors                             */
@@ -264,11 +266,19 @@ unsigned char String::concat(const String &s)
 
 unsigned char String::concat(const char *cstr, unsigned int length)
 {
-	unsigned int newlen = len + length;
 	if (!cstr) return 0;
 	if (length == 0) return 1;
+	if (length >= UINT_MAX - len) return 0; // Include terminating byte.
+	unsigned int newlen = len + length;
+	// reserve() can move the allocation when appending this String or a slice.
+	uintptr_t source = reinterpret_cast<uintptr_t>(cstr);
+	uintptr_t start = reinterpret_cast<uintptr_t>(buffer);
+	bool self = buffer && source >= start && source <= start + len;
+	unsigned int offset = self ? source - start : 0;
 	if (!reserve(newlen)) return 0;
-	strcpy(buffer + len, cstr);
+	if (self) cstr = buffer + offset;
+	memmove(buffer + len, cstr, length);
+	buffer[newlen] = '\0';
 	len = newlen;
 	return 1;
 }

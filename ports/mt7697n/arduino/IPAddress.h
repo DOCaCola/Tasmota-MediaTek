@@ -62,6 +62,7 @@ class IPAddress : public Printable {
 
 		virtual size_t printTo(Print& p) const;
 		virtual String toString() const;
+		bool fromString(const char *text);
 
 		friend class EthernetClass;
 		friend class UDP;

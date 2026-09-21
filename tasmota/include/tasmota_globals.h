@@ -25,6 +25,7 @@
 \*********************************************************************************************/
 
 // Needed for core 2.3.0 compilation (#6721)
+#if defined(ESP8266) || defined(ESP32)
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,8 +33,11 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+#endif
 
+#ifndef TASMOTA_PLATFORM_MT7697N
 #include <esp-knx-ip.h> // KNX Header files have to be global else compile fails -> lib/headers
+#endif
 #ifdef USE_KNX
 void KNX_CB_Action(message_t const &msg, void *arg);
 #endif  // USE_KNX
@@ -41,11 +45,13 @@ void KNX_CB_Action(message_t const &msg, void *arg);
 void WifiShutdown(bool option = false);
 void DomoticzTempHumPressureSensor(float temp, float hum, float baro = -1);
 char* ToHex_P(const unsigned char * in, size_t insz, char * out, size_t outsz, char inbetween = '\0');
+#if defined(ESP8266) || defined(ESP32)
 extern "C" void custom_crash_callback(struct rst_info * rst_info, uint32_t stack, uint32_t stack_end);
 extern "C" void resetPins();
 extern "C" int startWaveformClockCycles(uint8_t pin, uint32_t highCcys, uint32_t lowCcys,
   uint32_t runTimeCcys, int8_t alignPhase, uint32_t phaseOffsetCcys, bool autoPwm);
 extern "C" void setTimer1Callback(uint32_t (*fn)());
+#endif
 #ifdef USE_SERIAL_BRIDGE
 void SerialBridgeWrite(char *line, uint32_t len);
 #endif
@@ -69,6 +75,9 @@ String EthernetMacAddress(void);
 \*********************************************************************************************/
 
 #include "include/tasmota_configurations.h"            // Preconfigured configurations
+#ifdef TASMOTA_PLATFORM_MT7697N
+#include "tasmota_configurations_mt7697.h"
+#endif
 
 /*********************************************************************************************\
  * Final overrides
@@ -81,7 +90,9 @@ const char WIFI_HOSTNAME[] = WIFI_DEFAULT_HOSTNAME;    // Override by user_confi
 \*-------------------------------------------------------------------------------------------*/
 
 // created in pio-tools/pre_source_dir.py
-#if defined(CONFIG_TASMOTA_FLASHMODE_OPI)
+#if defined(TASMOTA_PLATFORM_MT7697N)
+  #define D_TASMOTA_FLASHMODE "XIP"
+#elif defined(CONFIG_TASMOTA_FLASHMODE_OPI)
   #define D_TASMOTA_FLASHMODE "OPI"
 #elif (CONFIG_TASMOTA_FLASHMODE_QIO)
   #define D_TASMOTA_FLASHMODE "QIO"

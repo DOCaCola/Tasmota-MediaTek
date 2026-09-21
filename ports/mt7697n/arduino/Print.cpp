@@ -24,9 +24,34 @@
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
-#include "Arduino.h"
 
 #include "Print.h"
+#include <stdarg.h>
+
+size_t Print::printf(const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  va_list sizing;
+  va_copy(sizing, args);
+  int length = vsnprintf(nullptr, 0, format, sizing);
+  va_end(sizing);
+  if (length < 0) {
+    va_end(args);
+    setWriteError(1);
+    return 0;
+  }
+  char *buffer = static_cast<char *>(malloc(static_cast<size_t>(length) + 1));
+  if (!buffer) {
+    va_end(args);
+    setWriteError(1);
+    return 0;
+  }
+  vsnprintf(buffer, static_cast<size_t>(length) + 1, format, args);
+  va_end(args);
+  size_t written = write(reinterpret_cast<const uint8_t *>(buffer), length);
+  free(buffer);
+  return written;
+}
 
 // Public Methods //////////////////////////////////////////////////////////////
 
