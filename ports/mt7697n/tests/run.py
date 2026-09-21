@@ -44,6 +44,16 @@ if __name__ == "__main__":
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
     subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
+    for name, sources in (
+        ("lamp", [HERE / "lamp_test.cpp"]),
+        ("lamp-driver", [HERE / "lamp_driver_test.cpp", PORT / "ylxd01yl_pwm.cpp"]),
+        ("pwm", [HERE / "pwm_test.cpp", PORT / "ylxd01yl_pwm.cpp"]),
+    ):
+        executable = output / (name + ".exe")
+        subprocess.run([options.cxx, "-std=c++17", "-O2", "-Wall", "-Wextra", "-Werror",
+                        "-I" + str(PORT), "-I" + str(HERE),
+                        *map(str, sources), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
     executable = output / "sdk-station.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "station_fakes"),

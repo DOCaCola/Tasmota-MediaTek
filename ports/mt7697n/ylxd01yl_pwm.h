@@ -17,6 +17,7 @@ class Pwm {
 
  private:
   bool apply(uint32_t warm, uint32_t cold, uint32_t night);
+  bool shutdown();
   bool ready_ = false;
   uint32_t duties_[3] = {0, 0, 0};
 };

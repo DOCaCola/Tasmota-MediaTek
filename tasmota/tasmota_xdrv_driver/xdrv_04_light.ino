@@ -589,7 +589,11 @@ class LightStateClass {
         // disable ct mode
         setColorMode(LCM_RGB);  // try deactivating CT mode, setColorMode() will check which is legal
       } else {
+#ifdef USE_YLXD01YL_LIGHT
+        ct = (ct < 153 ? 153 : (ct > 370 ? 370 : ct));
+#else
         ct = (ct < CT_MIN ? CT_MIN : (ct > CT_MAX ? CT_MAX : ct));
+#endif
         _ww = changeUIntScale(ct, Light.vct_ct[0], Light.vct_ct[CT_PIVOTS-1], 0, 255);
         _wc = 255 - _ww;
         _ct = ct;
@@ -631,7 +635,11 @@ class LightStateClass {
           _ww = changeUIntScale(w, 0, max, 0, 255);
           _wc = changeUIntScale(c, 0, max, 0, 255);
         }
+#ifdef USE_YLXD01YL_LIGHT
+        _ct = changeUIntScale(w, 0, sum, 153, 370);
+#else
         _ct = changeUIntScale(w, 0, sum, CT_MIN, CT_MAX);
+#endif
         addCTMode();   // activate CT mode if needed
         if (_color_mode & LCM_CT) { _briCT = free_range ? max : (sum > 255 ? 255 : sum); }
       }
@@ -1066,6 +1074,11 @@ void getCTRange(uint16_t * min_ct, uint16_t * max_ct) {
 }
 
 void setCTRange(uint16_t ct_min, uint16_t ct_max) {
+#ifdef USE_YLXD01YL_LIGHT
+  // This board's physical calibration and CCT frame encoding are fixed.
+  ct_min = 153;
+  ct_max = 370;
+#endif
   Light.vct_ct[0] = ct_min;
   for (uint32_t i = 1; i < CT_PIVOTS; i++) {
     Light.vct_ct[i] = ct_max;     // all slots above [1] are not used
@@ -3444,6 +3457,9 @@ bool Xdrv04(uint32_t function)
   }
   else if (TasmotaGlobal.light_type) {
     switch (function) {
+      case FUNC_ABOUT_TO_RESTART:
+        XlgtCall(function);
+        break;
       case FUNC_SERIAL:
         result = XlgtCall(FUNC_SERIAL);
         break;
@@ -3487,6 +3503,7 @@ bool Xdrv04(uint32_t function)
         break;
       case FUNC_PRE_INIT:
         LightInit();
+        XlgtCall(FUNC_PRE_INIT);
         break;
 #ifdef USE_LIGHT_ARTNET
       case FUNC_JSON_APPEND:

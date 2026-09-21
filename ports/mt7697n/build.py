@@ -286,7 +286,7 @@ def main():
         metadata["capabilities"] = {
             "serial_commands": "implemented; hardware unverified",
             "wifi_mqtt_settings": "implemented; hardware unverified",
-            "gpio_pwm": "disabled; dedicated lamp integration pending",
+            "gpio_pwm": "dedicated YLXD01YL CCT/night PWM driver; electrical validation pending",
             "ota": "HTTP IPv4 download, verified staging and Upgrade command implemented; hardware unverified",
             "retained_reboot_state": "not implemented",
         }

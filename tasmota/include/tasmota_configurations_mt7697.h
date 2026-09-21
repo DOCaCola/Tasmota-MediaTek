@@ -11,7 +11,9 @@
 #undef USE_EMULATION_SHELLY
 #undef USE_DISCOVERY
 #undef USE_TASMOTA_DISCOVERY
-#undef USE_LIGHT
+#define USE_LIGHT
+#define USE_YLXD01YL_LIGHT
+#undef USE_TUYA_MCU
 #undef USE_I2C
 #undef USE_SPI
 #undef USE_TLS

@@ -1704,6 +1704,15 @@ uint32_t GetOption(uint32_t index) {
 }
 
 void CmndSetoptionBase(bool indexed) {
+#ifdef USE_YLXD01YL_LIGHT
+  // The lamp driver owns channel order and CCT/day-night semantics.
+  if (XdrvMailbox.data_len && XdrvMailbox.payload != 0 &&
+      (XdrvMailbox.index == 37 || XdrvMailbox.index == 68 ||
+       XdrvMailbox.index == 92)) {
+    ResponseCmndChar(PSTR("Fixed by YLXD01YL light driver"));
+    return;
+  }
+#endif
   // Allow a command to access a single SetOption by it's command name
   // indexed = 0 : No index will be returned attached to the command
   //               {"ClockDirection":"OFF"}

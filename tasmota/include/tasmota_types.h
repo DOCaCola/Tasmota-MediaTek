@@ -713,7 +713,9 @@ typedef struct {
   // Keep subsequent settings offsets stable without claiming ESP compatibility.
   myio          my_gp;                     // 3AC: raw GPIO0..39, 80 bytes
   mytmplt       user_template;             // 3FC: warm/cold/night plus flags, 8 bytes
-  uint8_t       reserved_mt7697_404[77];    // 404
+  uint8_t       lamp_config_version;       // 404: native lamp settings schema
+  uint8_t       lamp_night;                // 405: 0 daylight, 1 night
+  uint8_t       reserved_mt7697_406[75];    // 406
   char          serial_delimiter;          // 451
   uint8_t       seriallog_level;           // 452
   uint8_t       sleep;                     // 453

@@ -13,6 +13,7 @@ const hal_pwm_channel_t channels[] = {HAL_PWM_32, HAL_PWM_33, HAL_PWM_31};
 }
 
 bool Pwm::begin() {
+  if (ready_) return true;
   ready_ = false;
   if (hal_pwm_init(HAL_PWM_CLOCK_40MHZ) != HAL_PWM_STATUS_OK) return false;
   // Set zero duty on every channel before routing any of them to the pins.
@@ -20,15 +21,25 @@ bool Pwm::begin() {
     uint32_t total = 0;
     if (hal_pwm_set_frequency(channels[i], kFrequencyHz, &total) != HAL_PWM_STATUS_OK ||
         total != kPeriodCounts ||
-        hal_pwm_set_duty_cycle(channels[i], 0) != HAL_PWM_STATUS_OK) return false;
+        hal_pwm_set_duty_cycle(channels[i], 0) != HAL_PWM_STATUS_OK) return shutdown();
     duties_[i] = 0;
   }
   for (unsigned i = 0; i < 3; ++i) {
     if (hal_pinmux_set_function(pins[i], 9) != HAL_PINMUX_STATUS_OK ||
-        hal_pwm_start(channels[i]) != HAL_PWM_STATUS_OK) return false;
+        hal_pwm_start(channels[i]) != HAL_PWM_STATUS_OK) return shutdown();
   }
   ready_ = true;
   return true;
+}
+
+bool Pwm::shutdown() {
+  ready_ = false;
+  for (unsigned i = 0; i < 3; ++i) {
+    hal_pwm_set_duty_cycle(channels[i], 0);
+    hal_pwm_stop(channels[i]);
+    duties_[i] = 0;
+  }
+  return false;
 }
 
 bool Pwm::apply(uint32_t warm, uint32_t cold, uint32_t night) {
@@ -41,12 +52,7 @@ bool Pwm::apply(uint32_t warm, uint32_t cold, uint32_t night) {
       if ((phase == 0 && next[i] < duties_[i]) ||
           (phase == 1 && next[i] > duties_[i])) {
         if (hal_pwm_set_duty_cycle(channels[i], next[i]) != HAL_PWM_STATUS_OK) {
-          ready_ = false;
-          for (unsigned j = 0; j < 3; ++j) {
-            hal_pwm_set_duty_cycle(channels[j], 0);
-            hal_pwm_stop(channels[j]);
-          }
-          return false;
+          return shutdown();
         }
         duties_[i] = next[i];
       }

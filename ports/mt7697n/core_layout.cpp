@@ -11,5 +11,6 @@
 static_assert(sizeof(TSettings) == mt7697::kSettingsSize, "Native settings size");
 static_assert(offsetof(TSettings, my_gp) == 0x3ac, "Native GPIO offset");
 static_assert(offsetof(TSettings, user_template) == 0x3fc, "Native template offset");
+static_assert(offsetof(TSettings, lamp_config_version) == 0x404, "Native lamp offset");
 static_assert(offsetof(TSettings, serial_delimiter) == 0x451, "Serial settings offset");
 static_assert(offsetof(TSettings, cfg_crc32) == 0xffc, "Settings CRC offset");

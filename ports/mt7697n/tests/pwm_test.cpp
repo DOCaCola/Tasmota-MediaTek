@@ -11,6 +11,7 @@ extern "C" {
 static uint32_t duties[34];
 static bool initialized[34], muxed[34], stopped[34], fail_next;
 static unsigned writes;
+static bool fail_start;
 
 extern "C" {
 hal_pwm_status_t hal_pwm_init(hal_pwm_source_clock_t clock) {
@@ -43,6 +44,7 @@ hal_pinmux_status_t hal_pinmux_set_function(hal_gpio_pin_t pin, uint8_t mux) {
 }
 hal_pwm_status_t hal_pwm_start(hal_pwm_channel_t channel) {
   assert(muxed[channel] && duties[channel] == 0);
+  if (fail_start) { fail_start = false; return HAL_PWM_STATUS_ERROR; }
   return HAL_PWM_STATUS_OK;
 }
 hal_pwm_status_t hal_pwm_stop(hal_pwm_channel_t channel) {
@@ -54,6 +56,12 @@ hal_pwm_status_t hal_pwm_stop(hal_pwm_channel_t channel) {
 int main() {
   ylxd01yl::Pwm light;
   assert(!light.daylight(1, 0));
+  ylxd01yl::Pwm startup_failure;
+  fail_start = true;
+  assert(!startup_failure.begin());
+  assert(!startup_failure.night(1));
+  assert(duties[31] == 0 && duties[32] == 0 && duties[33] == 0);
+  assert(stopped[31] && stopped[32] && stopped[33]);
   assert(light.begin());
   assert(light.daylight(0, 4000));
   assert(duties[33] == 4000);
