@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "ota.h"
+#include "sdk_layout.h"
 #include <string.h>
 #include <t_bearssl_hash.h>
 extern "C" {
@@ -33,14 +34,13 @@ bool fingerprint(uint32_t address, uint32_t size, const uint8_t* expected) {
 class SdkOtaFlash final : public OtaFlash {
  public:
   bool layout_matches() override {
-    // Fingerprints of the pinned Arduino BSP 0.10.21 bootloader and radio.
+    // GD25Q32-capable official loader and pinned BSP 0.10.21 radio.
     // Do not enable writes when running against the stock lamp flash layout.
-    static const uint8_t boot[20] = {
-      0x6b,0x7d,0x93,0xbf,0x07,0x70,0xed,0x2d,0xa3,0x7f,0x2a,0x84,0x29,0x09,0x8b,0xe5,0x42,0x75,0xfd,0x6c};
     static const uint8_t radio[20] = {
       0xc3,0xf8,0x94,0x9f,0xb6,0x8f,0x44,0x64,0xdf,0xdb,0xe7,0xab,0x19,0x95,0x77,0xa2,0x80,0x07,0x06,0xa7};
     return uintptr_t(&__FLASH_segment_start__) == 0x10079000 &&
-           fingerprint(0, 27284, boot) && fingerprint(0x10000, 297882, radio);
+           fingerprint(0, kBootloaderBytes, kBootloaderSha1) &&
+           fingerprint(0x10000, 297882, radio);
   }
   bool read(uint32_t offset, void* bytes, size_t size) override {
     return offset <= kOtaLength && size <= kOtaLength - offset &&

@@ -214,6 +214,17 @@ within the dedicated FOTA region and verifies the complete payload by readback.
 Activation is separate and never reboots. The final 4 KiB staging sector is
 reserved for bootloader markers. SHA-1 checksums are not signatures.
 
+The OTA gate now requires the official GD25Q32-capable loader from MediaTek
+commit `53acd43fbee57b034141068969fa643465dfd743`, acquired and hash-checked by
+`python bootloader.py` (also run by `bootstrap.py`). It is kept separately in
+`port/vendor/linkit-bootloader/`; the original BSP package remains intact.
+The BSP 0.10.21 loader lacks GD25Q32CSIG and falls back to 2 MiB geometry.
+Do not install this application expecting OTA to work with that old loader.
+The replacement uses the same SDK partition addresses. Build-time checks
+verify its GD25Q32 entry, partitions and fingerprint; boot/OTA operation
+still requires hardware validation. Startup reports physical JEDEC bytes
+separately from the application SDK's selected flash geometry.
+
 Build the application, install `tests/requirements-arm.txt`, then:
 
 ```text

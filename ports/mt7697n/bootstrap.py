@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 import tarfile
 import zipfile
+from bootloader import acquire as acquire_bootloader
 from urllib.request import urlopen
 
 WORK = Path(__file__).resolve().parents[3]
@@ -53,3 +54,4 @@ if __name__ == "__main__":
             with tarfile.open(archive) as contents:
                 contents.extractall(WORK / "vendor" / directory, filter="data")
         print("Verified and extracted", name, flush=True)
+    print("Verified GD25Q32-capable bootloader:", acquire_bootloader())

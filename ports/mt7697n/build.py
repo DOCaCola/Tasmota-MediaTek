@@ -240,6 +240,8 @@ def main():
     if undefined.strip():
         raise SystemExit("Unexpected unresolved ELF symbols:\n" + undefined)
     if options.application:
+        subprocess.run([sys.executable, str(HERE / "tests/sdk_layout_test.py")],
+                       check=True)
         subprocess.run([sys.executable, str(HERE / "tests/supplicant_trace_test.py"),
                         str(elf)], check=True)
     binary = BUILD / (artifact + ".bin")
