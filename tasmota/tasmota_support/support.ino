@@ -1795,6 +1795,7 @@ void SetModuleType(void)
 #endif
 }
 
+#ifndef TASMOTA_PLATFORM_MT7697N
 bool FlashPin(uint32_t pin) {
 #ifdef ESP8266
   return (((pin > 5) && (pin < 9)) || (11 == pin));
@@ -1844,7 +1845,12 @@ bool RedPin(uint32_t pin) {            // Pin may be dangerous to change, displa
 #endif  // ESP32
 }
 
+#endif
+
 uint32_t ValidPin(uint32_t pin, uint32_t gpio, uint8_t isTuya = false) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  return GPIO_NONE;  // Network-only milestone: no generic board GPIO routing.
+#else
   if (FlashPin(pin)) {
     return GPIO_NONE;    // Disable flash pins GPIO6, GPIO7, GPIO8 and GPIO11
   }
@@ -1858,6 +1864,7 @@ uint32_t ValidPin(uint32_t pin, uint32_t gpio, uint8_t isTuya = false) {
 #endif
 
   return gpio;
+#endif
 }
 
 bool ValidGPIO(uint32_t pin, uint32_t gpio) {

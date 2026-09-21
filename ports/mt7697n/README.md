@@ -2,9 +2,10 @@
 
 This directory starts a native platform port on Tasmota commit
 `8a7e815f6de5ad3822e9f28dd06f72d442e90c6c`, branch `mt7697n-ylxd01yl`.
-**It does not yet build or run the Tasmota application.** The current outputs
-are SDK integration probes used to establish the platform before adapting
-the Tasmota core. No ESP8266/ESP32 macros are used to impersonate another MCU.
+**The full Tasmota development application now compiles and links.** It has
+not run on the lamp. Native OTA and GPIO/PWM controls are unavailable in this
+bring-up build; the Wi-Fi/settings/MQTT milestone is not yet demonstrated.
+The separate probe targets remain SDK integration checks. No ESP8266/ESP32 macros are used to impersonate another MCU.
 
 ## Reproduce on Windows
 
@@ -146,21 +147,42 @@ Details and evidence: `../../../../RnD/native-platform-services.md`.
 `--platform` also compiles the real native `TSettings` layout with offset/size
 assertions and syntax-checks the core-hook fixtures using the ARM compiler.
 The host test runner executes five suites, including actual core save/load
-functions and native station hooks. This does not compile the full application.
+functions and native station hooks. This probe does not compile the full application.
 Current integration: `../../../../RnD/native-core-integration.md`.
 # Full application build status
 
-Native system/network reporting, asynchronous scan, PHY selection, settings
-reset boundaries and main-task NTP/RTC services are implemented. Eleven C++
-host suites and four Python sketch tests pass. Radio-power changes and
-ESP-specific erase resets report unsupported. DNS uses the SDK timeout.
+`python build.py --application --compiler gcc13-sdk-runtime` now produces the
+full native sketch's `tasmota.elf`, `tasmota.bin`, linker map and result metadata.
+This is an SDK-layout development artifact, **not a validated installation**.
 
-`python build.py --application --compiler gcc13-sdk-runtime` compiles the
-active Tasmota sketch but **still fails with seven compiler diagnostics** in
-PWM and OTA integration. Remaining library linkage and hardware validation
-are also outstanding. Successful probe builds remain probes; no application
-ELF/BIN is produced by this stage. See
-`../../../../RnD/full-application-build.md` for current evidence and limits.
+Native system/network reporting, asynchronous scan, PHY commands, banked
+settings and main-task NTP/RTC services are linked. Generic GPIO/PWM controls
+and template edits explicitly report unavailable; pin validation prevents
+routing MCU numbers through the LinkIt board's Arduino pin table. Upgrade
+reports unavailable until native OTA staging, validation, activation and
+package generation are implemented. No ESP updater is linked as a substitute.
+
+The build includes ARM Ext-printf, JSON escaping, and native wall-clock and
+delay services. Ext-printf's ARM cursor handling follows AAPCS32 and preserves
+argument alignment when ordinary floats/length modifiers precede extensions.
+The SDK nano runtime still requires Tasmota's pointer-based extensions for
+64-bit integer formatting. Compile flags reject missing returns and emit
+`.su` stack-usage files; they cannot measure prebuilt SDK call-chain depth.
+
+Eleven host C++ suites and four Python tests pass. A separate ARM execution
+test runs the production formatter/clock objects against the SDK C runtime:
+
+```text
+python -m pip install -r tests/requirements-arm.txt
+python tests/arm_runtime_test.py
+```
+
+Build the application first. The test uses Unicorn for CPU execution, not
+MediaTek peripheral emulation. It checks register/stack variadic arguments,
+extended and float formatting, allocation, truncation and clock rollover.
+Hardware boot, Wi-Fi, persistence, stack/heap measurements, retained reboot
+state and OTA remain outstanding. Current evidence and artifacts:
+`../../../../RnD/full-application-build.md`.
 
 The application build requires Arduino ctags 5.8-arduino11. Use `--ctags PATH`
 when it is not installed in the standard Windows Arduino15 tools directory.

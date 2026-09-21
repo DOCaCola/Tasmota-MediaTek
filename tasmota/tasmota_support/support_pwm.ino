@@ -17,6 +17,19 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#ifdef TASMOTA_PLATFORM_MT7697N
+// The network bring-up target has no user-configurable GPIOs. Do not route
+// MCU numbers through the LinkIt development board's Arduino pin table.
+void AnalogWrite(uint8_t, int) { abort(); }
+uint32_t AnalogRead(uint8_t) { return uint32_t(-1); }
+void PwmRearmChanges(void) {}
+void GpioInitPwm(void) {}
+void ResetPwm(void) {}
+void CmndPwm(void) { ResponseCmndChar(PSTR("Lamp PWM is not enabled in this build")); }
+void CmndPwmfrequency(void) { CmndPwm(); }
+void CmndPwmrange(void) { CmndPwm(); }
+void MqttShowPWMState(void) { ResponseAppend_P(PSTR("\"PWM\":{}")); }
+#else
 int16_t analog_write_state[MAX_GPIO_PIN] = { -1 };
 
 void AnalogWrite(uint8_t pin, int val) {
@@ -334,3 +347,5 @@ void MqttShowPWMState(void)
   }
   ResponseJsonEnd();
 }
+
+#endif  // TASMOTA_PLATFORM_MT7697N

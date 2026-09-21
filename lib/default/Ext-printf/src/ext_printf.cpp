@@ -127,6 +127,10 @@ void * __va_cur_ptr4(va_list &va) {
 // >>> Reading a_ptr=0x3FFFFD74 *a_ptr=7
 // >>> Reading a_ptr=0x3FFFFD78 *a_ptr=8
 
+#elif defined(TASMOTA_PLATFORM_MT7697N)
+#include "arm_va.h"
+#define va_cur_ptr4(va,T) ( (T*) ext_arm_previous_word(va) )
+
 #elif defined(__riscv)
 // #define __va_argsiz_tas(t)  	(((sizeof(t) + sizeof(int) - 1) / sizeof(int)) * sizeof(int))
 #define va_cur_ptr4(va,T) ( (T*) __va_cur_ptr4(va) )
@@ -255,7 +259,11 @@ char * copyStr(const char * str) {
 }
 
 const char ext_invalid_mem[] PROGMEM = "<--INVALID-->";
+#ifdef TASMOTA_PLATFORM_MT7697N
+const uint32_t min_valid_ptr = 0x00100000;  // MT7697 TCM, XIP and SRAM are above this.
+#else
 const uint32_t min_valid_ptr = 0x3F000000;    // addresses below this line are invalid
+#endif
 
 int32_t ext_vsnprintf_P(char * out_buf, size_t buf_len, const char * fmt_P, va_list va) {
   va_list va_cpy;
@@ -291,10 +299,17 @@ int32_t ext_vsnprintf_P(char * out_buf, size_t buf_len, const char * fmt_P, va_l
       if (*fmt < 'A') {
         decimals = strtol(fmt, nullptr, 10);
       }
-      while (*fmt < 'A') {    // brutal way to munch anything that is not a letter or '-' (or anything else)
+      while (*fmt && *fmt < 'A') {    // brutal way to munch anything that is not a letter or '-' (or anything else)
       // while ((*fmt >= '0' && *fmt <= '9') || (*fmt == '.') || (*fmt == '*') || (*fmt == '-' || (*fmt == ' ' || (*fmt == '+') || (*fmt == '#')))) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+        if (*fmt == '*') {
+          decimals = va_arg(va, int32_t);
+          decimals_ptr = va_cur_ptr4(va, int32_t);
+        }
+#endif
         fmt++;
 			}
+      if (!*fmt) { goto free_allocs; }
 
       if (*fmt == '_') {      // extension
         if (decimals_ptr) {
@@ -467,8 +482,12 @@ int32_t ext_vsnprintf_P(char * out_buf, size_t buf_len, const char * fmt_P, va_l
         *fmt = 's';     // replace `%_X` with `%0s` to display a string instead
 
       } else {
+#ifdef TASMOTA_PLATFORM_MT7697N
+        ext_arm_skip_standard(va, fmt);
+#else
         va_arg(va, int32_t);      // munch one 32 bits argument and leave it unchanged
         // we take the hypothesis here that passing 64 bits arguments is always unsupported in ESP8266
+#endif
       }
     }
   }

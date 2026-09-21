@@ -127,6 +127,7 @@ def main():
     flags = machine + [
         "-Os", "-g", "-ffunction-sections", "-fdata-sections",
         "-fno-builtin", "-fno-strict-aliasing", "-fno-common",
+        "-fstack-usage", "-Werror=return-type",
     ] + ["-D" + d for d in definitions] + ["-I" + p.as_posix() for p in includes]
     sources = sorted(
         p for directory in (core, variant) for p in directory.iterdir()
@@ -147,6 +148,7 @@ def main():
         sources += [HERE / "dependency_probe.cpp", mqtt / "PubSubClient.cpp",
                     json_parser / "JsonParser.cpp", json_parser / "jsmn.cpp"]
     if options.platform:
+        sources = [p for p in sources if p.name != "variant_delay.c"]
         sources += sorted((HERE / "platform").glob("*.cpp"))
         sources += [HERE / "core_layout.cpp"]
         flags += ["-DTASMOTA_PLATFORM_MT7697N", "-I" + HERE.as_posix(),
@@ -162,6 +164,8 @@ def main():
         for directory in (root / "lib/default").iterdir():
             if directory.is_dir():
                 flags += ["-I" + (directory / "src" if (directory / "src").is_dir() else directory).as_posix()]
+        sources += [root / "lib/default/Ext-printf/src/ext_printf.cpp",
+                    root / "lib/default/jsmn-shadinger-1.0/src/JsonGenerator.cpp"]
         units = [sketch / "tasmota.ino"] + sorted(sketch.glob("tasmota_*/*.ino"))
         application = BUILD / "tasmota.cpp"
         application.write_text('#include <Arduino.h>\n' +
@@ -256,6 +260,13 @@ def main():
         "source_files": len(sources),
     }
     if options.application:
+        metadata["capabilities"] = {
+            "serial_commands": "implemented; hardware unverified",
+            "wifi_mqtt_settings": "implemented; hardware unverified",
+            "gpio_pwm": "disabled; dedicated lamp integration pending",
+            "ota": "unavailable; native package and activation implementation pending",
+            "retained_reboot_state": "not implemented",
+        }
         metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()
     if sdk_runtime:
         metadata["runtime_archives"] = {

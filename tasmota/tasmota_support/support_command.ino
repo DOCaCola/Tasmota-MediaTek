@@ -1355,6 +1355,9 @@ void CmndSleep(void)
 }
 
 void CmndUpgrade(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  ResponseCmndChar(PSTR("Native OTA is not available in this build"));
+#else
   // Check if the payload is numerically 1, and had no trailing chars.
   //   e.g. "1foo" or "1.2.3" could fool us.
   // Check if the version we have been asked to upgrade to is higher than our current version.
@@ -1379,6 +1382,7 @@ void CmndUpgrade(void) {
   else {
     Response_P(PSTR("{\"%s\":\"" D_JSON_ONE_OR_GT "\"}"), XdrvMailbox.command, TasmotaGlobal.version);
   }
+#endif
 }
 
 void CmndOtaUrl(void)
@@ -2038,6 +2042,9 @@ bool GpioSensorType(uint32_t gpio, uint32_t sensor_type) {
 }
 
 void CmndGpio(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  ResponseCmndChar(PSTR("GPIO configuration is not enabled in this build"));
+#else
   // Gpio         - Show all GPIOs available in module like {"GPIO0":{"None":0},"GPIO1":{"None":0},"GPIO2":{"Relay1":224},...
   // Gpio 1       - Show all GPIOs available in module like {"GPIO":[[0,0,"None"],[1,0,"None"],[2,224,"Relay1"],...
   // Gpio 2       - Show all GPIOs available in module like {"GPIO":[[0,0],[1,0],[2,224],...
@@ -2156,6 +2163,7 @@ void CmndGpio(void) {
       }
     }
   }
+#endif
 }
 
 void CmndGpioRead(void) {
@@ -2208,6 +2216,9 @@ void ShowGpios(const uint16_t *NiceList, uint32_t size, uint32_t offset, uint32_
 }
 
 void CmndGpios(void) {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  ResponseCmndChar(PSTR("GPIO configuration is not enabled in this build"));
+#else
   // Gpios     - Show all compiled supported GPIOs
   // Gpio 255  - Show all possible GPIOs
   uint32_t lines = 1;
@@ -2223,10 +2234,16 @@ void CmndGpios(void) {
 #endif  // ESP8266
   }
   ResponseClear();
+#endif
 }
 
 void CmndTemplate(void)
 {
+#ifdef TASMOTA_PLATFORM_MT7697N
+  if (XdrvMailbox.data_len) {
+    ResponseCmndChar(PSTR("Custom templates are not enabled in this build"));
+  } else { TemplateJson(); }
+#else
   // {"NAME":"Shelly 2.5","GPIO":[320,0,32,0,224,193,0,0,640,192,608,225,3456,4736],"FLAG":0,"BASE":18}
 
   bool error = false;
@@ -2282,6 +2299,7 @@ void CmndTemplate(void)
 #endif // FIRMWARE_MINIMAL
   }
   if (!error) { TemplateJson(); }
+#endif
 }
 
 void CmndButtonDebounce(void)

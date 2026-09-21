@@ -31,6 +31,7 @@ const uint32_t MINS_PER_HOUR = 60UL;
 
 #ifdef TASMOTA_PLATFORM_MT7697N
 #include <platform/ntp.h>
+extern "C" void mt7697_wall_clock_poll();
 #else
 #include <Ticker.h>
 Ticker TickerRtc;
@@ -558,6 +559,7 @@ void RtcPreInit(void) {
 
 #ifdef TASMOTA_PLATFORM_MT7697N
 void NativeRtcPoll(void) {
+  mt7697_wall_clock_poll();
   if (uint32_t(millis() - Rtc.millis) >= 1000) { RtcSecond(); }
 }
 #endif

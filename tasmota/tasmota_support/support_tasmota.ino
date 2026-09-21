@@ -1400,11 +1400,15 @@ void Every250mSeconds(void)
  * Every second at 0.25 second interval
 \*-------------------------------------------------------------------------------------------*/
 
+#ifndef TASMOTA_PLATFORM_MT7697N
   static int ota_result = 0;
   static uint8_t ota_retry_counter = OTA_ATTEMPTS;
 
+#endif
+
   switch (TasmotaGlobal.state_250mS) {
   case 0:                                                 // Every x.0 second
+#ifndef TASMOTA_PLATFORM_MT7697N
     if (TasmotaGlobal.ota_state_flag && CommandsReady()) {
       TasmotaGlobal.ota_state_flag--;
       if (2 == TasmotaGlobal.ota_state_flag) {
@@ -1551,6 +1555,7 @@ void Every250mSeconds(void)
         AllowInterrupts(1);
       }
     }
+#endif
     break;
   case 1:                                                 // Every x.25 second
     if (MidnightNow()) {
@@ -2215,8 +2220,10 @@ void GpioInit(void)
     }
   }
 
+#ifndef TASMOTA_PLATFORM_MT7697N
   analogWriteRange(Settings->pwm_range);      // Default is 1023 (Arduino.h)
   analogWriteFreq(Settings->pwm_frequency);   // Default is 1000 (core_esp8266_wiring_pwm.c)
+#endif
 
 #ifdef ESP8266
   if ((2 == Pin(GPIO_TXD)) || (H801 == TasmotaGlobal.module_type)) { Serial.set_tx(2); }

@@ -98,6 +98,7 @@ typedef const void* uint_farptr_t;
 
 #define sprintf_P(s, f, ...) sprintf((s), (f), __VA_ARGS__)
 #define snprintf_P(s, f, ...) snprintf((s), (f), __VA_ARGS__)
+#define vsnprintf_P(s, n, f, a) vsnprintf((s), (n), (f), (a))
 
 #define pgm_read_byte(addr) (*(const unsigned char *)(addr))
 #define pgm_read_word(addr) (*(const unsigned short *)(addr))
