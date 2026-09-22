@@ -72,11 +72,14 @@ class TasmotaWebServer {
   void reset();
   void openListener();
   void releaseListener();
+  bool acceptClient();
+  bool prefer_new_=false;
   bool wanted_=false,listener_ready_=false;
   uint32_t last_open_=0;
   int port_, listener_ = -1;
   NativeWebClient client_;
-  NativeWebClient idle_[3];
+  static constexpr unsigned kIdleCount=4;
+  NativeWebClient idle_[kIdleCount];
   unsigned idle_cursor_=0;
   Route routes_[32];
   unsigned route_count_ = 0;

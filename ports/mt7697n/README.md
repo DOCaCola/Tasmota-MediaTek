@@ -272,8 +272,23 @@ hardware validation. See `../../../../RnD/tasmota-ap-webserver.md`.
 
 The console, settings pages and native URL OTA are available. Multipart file
 uploads/settings restore and GPIO/template configuration are not implemented.
-The transport limits requests to 8 KiB and closes each connection after one
-response. HTTP authentication uses the standard Tasmota web password.
+The transport limits requests to 8 KiB and reuses HTTP/1.1 connections unless
+the client requests close. Four idle sockets share the request parser and
+expire after 15 seconds. Responses are queued (maximum 32 KiB), then drained
+without blocking the main loop. Connection reuse avoids accumulating TCP
+TIME_WAIT entries in the SDK's separate 36 KiB lwIP pool during browser polling.
+HTTP authentication uses the standard Tasmota web password.
+
+`WebStatus` reports accepted connections, completed responses, temporary send
+waits, errors, timeouts and response-queue usage. Completed responses can exceed
+accepted connections because a socket is reusable; completion means handed to
+TCP, not acknowledged by the browser. `TcpStatus` adds receive/ACK counters,
+active and TIME_WAIT connection counts, queued buffers and the SDK pool's used,
+peak and allocation-error counters. `Last` is port/sequence/receive-next/ACK/
+previous-ACK/resulting-ACK; `Stalled` retains the last retransmitting connection.
+The diagnostics are read-only and snapshot PCB lists on the TCP/IP thread.
+Run `tests/tcp_diagnostics_test.py` after building to validate their ABI against
+the linked vendor debug information.
 
 ### Wi-Fi station review (2026-09-21)
 

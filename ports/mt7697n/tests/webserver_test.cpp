@@ -15,6 +15,7 @@ static unsigned send_failures,close_failures,listener_close_failures,accepts;
 static int send_error=ENOMEM;
 static int incoming_fd=2;
 static bool open_fd[8]={},eof=false;
+static bool competing_idle=false;
 uint32_t millis() { return now; }
 void delay(unsigned long n) { now+=n; }
 extern "C" {
@@ -43,6 +44,9 @@ int lwip_send(int,const void* data,size_t n,int) {
   n=std::min(n,send_limit);outgoing.append(static_cast<const char*>(data),n);return n;
 }
 int lwip_recv(int fd,void* data,size_t n,int flags) {
+  if(competing_idle && fd==2 && incoming_fd==3 && (flags&MSG_PEEK)) {
+    *static_cast<char*>(data)='G';return 1;
+  }
   if(fd!=incoming_fd) {errno=EAGAIN;return -1;}
   if(eof && position==incoming.size()) return 0;
   if(position==incoming.size()){errno=EAGAIN;return -1;}
@@ -189,7 +193,9 @@ int main() {
   assert(accepts==accepted_before+1); // No per-request TIME_WAIT allocation.
   server.handleClient(); // Park first browser.
   incoming_fd=3;connected=false;
+  competing_idle=true;const unsigned scheduling_start=now;
   request("GET / HTTP/1.1\r\n\r\n");
+  assert(now-scheduling_start<20);competing_idle=false;
   assert(open_fd[2] && !open_fd[3]); // Idle first browser doesn't block second.
   incoming_fd=2;eof=true;server.handleClient();eof=false;
   assert(!open_fd[2]);
@@ -198,6 +204,12 @@ int main() {
   assert(open_fd[2]);
   now+=15001;close_failures=1;server.handleClient();
   assert(open_fd[2]);server.handleClient();assert(!open_fd[2]);
+  incoming="";position=0;pending=true;incoming_fd=2;
+  server.handleClient();server.handleClient(); // Browser opens TCP before requesting.
+  incoming_fd=3;connected=false;
+  const unsigned preconnect_start=now;
+  request("GET / HTTP/1.1\r\n\r\n");
+  assert(now-preconnect_start<20 && open_fd[2] && !open_fd[3]);
   server.close();
   puts("Native webserver: fragmented forms, chunked output, authentication, framing rejection, timeouts and recovery passed.");
 }

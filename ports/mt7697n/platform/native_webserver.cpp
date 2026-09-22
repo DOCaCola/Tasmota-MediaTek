@@ -142,7 +142,7 @@ void TasmotaWebServer::openListener() {
   address.sin_family=AF_INET; address.sin_port=lwip_htons(port_);
   int reuse=1; lwip_setsockopt(listener_,SOL_SOCKET,SO_REUSEADDR,&reuse,sizeof(reuse));
   if (!nonblock(listener_) || lwip_bind(listener_,reinterpret_cast<sockaddr*>(&address),sizeof(address))<0 ||
-      lwip_listen(listener_,1)<0) { releaseListener();return; }
+      lwip_listen(listener_,kIdleCount)<0) { releaseListener();return; }
   listener_ready_=true;
 }
 void TasmotaWebServer::close() {
@@ -214,6 +214,15 @@ bool TasmotaWebServer::parse() {
   }
   return true;
 }
+bool TasmotaWebServer::acceptClient() {
+  sockaddr_in peer={};socklen_t length=sizeof(peer);
+  int fd=lwip_accept(listener_,reinterpret_cast<sockaddr*>(&peer),&length);
+  if (fd<0) return false;
+  reset();client_.socket_=fd;client_.peer_=IPAddress(peer.sin_addr.s_addr);started_=millis();
+  ++statistics.accepted;prefer_new_=false;
+  if (!nonblock(fd)) client_.abortResponse();
+  return true;
+}
 void TasmotaWebServer::handleClient() {
   // Keep only idle sockets here: request parsing and response generation retain
   // one owner, while idle browsers cannot monopolize the server.
@@ -240,11 +249,12 @@ void TasmotaWebServer::handleClient() {
     if (wanted_ && uint32_t(millis()-last_open_)>=1000) openListener();
     return;
   }
+  if (client_.socket_<0 && prefer_new_) acceptClient();
   if (client_.socket_<0) {
     // Round-robin ready persistent connections. Peek never consumes bytes;
     // normal framing/parser validation still owns the entire request.
-    for (unsigned i=0;i<3;++i) {
-      auto& idle=idle_[(idle_cursor_+i)%3];
+    for (unsigned i=0;i<kIdleCount;++i) {
+      auto& idle=idle_[(idle_cursor_+i)%kIdleCount];
       if (idle.socket_<0 || idle.closing_) continue;
       char byte;
       int n=lwip_recv(idle.socket_,&byte,1,MSG_PEEK|MSG_DONTWAIT);
@@ -253,23 +263,21 @@ void TasmotaWebServer::handleClient() {
       }
       if (n>0) {
         reset();client_.socket_=idle.socket_;client_.peer_=idle.peer_;
-        idle.socket_=-1;started_=millis();idle_cursor_=(idle_cursor_+i+1)%3;
+        idle.socket_=-1;started_=millis();idle_cursor_=(idle_cursor_+i+1)%kIdleCount;
+        prefer_new_=true;
         break;
       }
     }
   }
   if (client_.socket_<0) {
-    sockaddr_in peer={};socklen_t length=sizeof(peer);
-    int fd=lwip_accept(listener_,reinterpret_cast<sockaddr*>(&peer),&length);
-    if (fd<0) return;
-    reset();client_.socket_=fd;client_.peer_=IPAddress(peer.sin_addr.s_addr);started_=millis();
-    ++statistics.accepted;
-    if (!nonblock(fd)) {client_.abortResponse();return;}
+    if (!acceptClient()) return;
   }
+  if (client_.closing_) return;
   if (uint32_t(millis()-started_)>5000 || received_==sizeof(request_)-1) {client_.stop();return;}
   int n=lwip_recv(client_.socket_,request_+received_,sizeof(request_)-1-received_,MSG_DONTWAIT);
   if (n<=0) {
     if (!n || (errno!=EAGAIN && errno!=EWOULDBLOCK)) client_.stop();
+    else if (!received_) client_.reusable_=true; // Idle browser preconnection.
     return;
   }
   if (memchr(request_+received_,0,n)) {client_.stop();return;}
