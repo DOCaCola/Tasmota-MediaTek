@@ -4401,7 +4401,7 @@ const char kWebCmndStatus[] PROGMEM = D_JSON_DONE "|" D_JSON_WRONG_PARAMETERS "|
 
 const char kWebCommands[] PROGMEM = "|"  // No prefix
 #ifdef TASMOTA_PLATFORM_MT7697N
-  "WebStatus|"
+  "TcpStatus|WebStatus|"
 #endif
   D_CMND_WEBLOG "|"
   D_CMND_WEBTIME "|"
@@ -4426,7 +4426,7 @@ const char kWebCommands[] PROGMEM = "|"  // No prefix
 
 void (* const WebCommand[])(void) PROGMEM = {
 #ifdef TASMOTA_PLATFORM_MT7697N
-  &CmndWebStatus,
+  &CmndTcpStatus, &CmndWebStatus,
 #endif
   &CmndWeblog,
   &CmndWebTime,
@@ -4452,6 +4452,21 @@ void (* const WebCommand[])(void) PROGMEM = {
 /*********************************************************************************************/
 
 #ifdef TASMOTA_PLATFORM_MT7697N
+#include "platform/tcp_diagnostics.h"
+void CmndTcpStatus(void) {
+  mt7697::TcpDiagnostics s;
+  const bool ok=mt7697::tcp_diagnostics(s);
+  Response_P(PSTR("{\"TcpStatus\":{\"Valid\":%s,\"Ingress\":%u,\"InputErrors\":%u,"
+    "\"Processed\":%u,\"BadChecksum\":%u,\"Advanced\":%u,\"Active\":%u,\"TimeWait\":%u,"
+    "\"Queued\":%u,\"Retransmitted\":%u,\"PowerSave\":%d,\"Last\":[%u,%u,%u,%u,%u,%u],"
+    "\"Stalled\":[%u,%u,%u,%u],\"Rejected\":[%u,%u,%u,%u,%u,%u,%u]}}"),
+    ok?"true":"false",s.ingress,s.input_errors,s.processed,s.bad_checksum,s.advanced,
+    s.active,s.timewait,s.queued,s.retransmitted,s.power_save,s.last_port,s.last_seq,
+    s.last_rxnext,s.last_ack,s.before_ack,s.after_ack,
+    s.stalled_port,s.stalled_ack,s.stalled_next,s.stalled_queue,
+    s.rejected,s.rejected_port,s.rejected_seq,s.rejected_rxnext,
+    s.rejected_ack,s.rejected_before,s.rejected_next);
+}
 void CmndWebStatus(void) {
   const auto& s=NativeWebStatistics();
   Response_P(PSTR("{\"WebStatus\":{\"Accepted\":%u,\"Completed\":%u,\"SendWaits\":%u,"

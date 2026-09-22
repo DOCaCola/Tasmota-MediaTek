@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "rx_trace.h"
+#include "tcp_diagnostics.h"
 #include <atomic>
 #include <stdio.h>
 extern "C" {
@@ -22,7 +23,9 @@ extern "C" err_t __wrap_tcpip_input(struct pbuf* packet, struct netif* iface) {
   } else if (iface->name[0]=='a' && iface->name[1]=='p') {
     ++ap_frames;if (reply) ++ap_dhcp;
   }
-  return __real_tcpip_input(packet,iface);
+  const auto result=__real_tcpip_input(packet,iface);
+  mt7697::record_tcp_ingress(header,length,result);
+  return result;
 }
 namespace mt7697 {
 void report_network_rx() {
