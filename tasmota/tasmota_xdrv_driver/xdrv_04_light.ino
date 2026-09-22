@@ -1526,6 +1526,12 @@ void ResponseLightState(uint8_t append)
       ResponseAppend_P(PSTR("]"));
     }
 
+#ifdef USE_YLXD01YL_LIGHT
+    if (TasmotaGlobal.light_driver == 12) {
+      // Include the selected physical group in normal MQTT STATE/RESULT.
+      ResponseAppend_P(PSTR(",\"LampNight\":%u"), Settings->lamp_night);
+    }
+#endif
     if (append) {
       if (Light.subtype >= LST_RGB) {
         ResponseAppend_P(PSTR(",\"" D_CMND_SCHEME "\":%d"), Settings->light_scheme);

@@ -27,6 +27,12 @@ if __name__ == "__main__":
             raise RuntimeError("Core function not found: " + name)
         functions.append(match.group())
     (output / "core_settings_functions.inc").write_text("\n\n".join(functions))
+    power_source = (core / "tasmota_support/support_tasmota.ino").read_text()
+    power_function = re.search(r"^void SetPowerOnState\(void\)\s*\{.*?^\}",
+                               power_source, re.M | re.S)
+    if not power_function:
+        raise RuntimeError("Core power-on function not found")
+    (output / "power_on_function.inc").write_text(power_function.group())
     manager_source = (core / "tasmota_xdrv_driver/xdrv_01_z_manager_mt7697.ino").read_text()
     trial_functions = []
     for name in ("NativeWifiTestBegin", "NativeWifiTestHasIP", "NativeWifiTestCommit", "NativeWifiTestDiscard"):
@@ -104,6 +110,11 @@ if __name__ == "__main__":
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "system_fakes"), str(HERE / "system_test.cpp"),
                     str(PORT / "platform/system.cpp"), "-o", str(executable)], check=True)
+    subprocess.run([str(executable)], check=True)
+    executable = output / "power-on.exe"
+    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                    "-I" + str(output), str(HERE / "power_on_test.cpp"),
+                    "-o", str(executable)], check=True)
     subprocess.run([str(executable)], check=True)
     # Network reporting uses real Arduino value types and the actual .ino;
     # only SDK calls are replaced to exercise error paths without hardware.

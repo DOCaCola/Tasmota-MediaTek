@@ -30,6 +30,7 @@ void CmndLampNight(void) {
           Settings->lamp_night_dimmer : Settings->lamp_day_dimmer);
       Light.update=true;
       if (Settings->save_data) TasmotaGlobal.save_data_counter = 2;
+      if (Settings->flag3.hass_tele_on_power) MqttPublishTeleState();
     }
   }
   Response_P(PSTR("{\"LampNight\":%d,\"LampReady\":%s}"),

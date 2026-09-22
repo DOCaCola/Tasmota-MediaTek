@@ -11,6 +11,9 @@ String GetDeviceHardware(void) { return String("MT7697N"); }
 String GetDeviceHardwareRevision(void) { return String("YLXD01YL / MT7697N"); }
 String GetCodeCores(void) { return String("-ARM"); }
 void EspRestart(void) {
+  if (!mt7697::prepare_restart()) {
+    AddLog(LOG_LEVEL_ERROR, PSTR("SYS: Cannot retain software restart reason"));
+  }
   Serial.flush();
   mt7697::restart();
 }

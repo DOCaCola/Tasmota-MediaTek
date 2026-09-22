@@ -266,6 +266,8 @@ def main():
                        check=True)
         subprocess.run([sys.executable, str(HERE / "tests/ota_activation_arm_test.py"),
                         str(elf)], check=True)
+        subprocess.run([sys.executable, str(HERE / "tests/boot_retention_arm_test.py"),
+                        str(elf)], check=True)
     binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
     if options.platform:
@@ -311,7 +313,7 @@ def main():
             "wifi_mqtt_settings": "implemented; hardware unverified",
             "gpio_pwm": "dedicated YLXD01YL CCT/night PWM driver; electrical validation pending",
             "ota": "HTTP IPv4 download, verified staging and Upgrade command implemented; hardware unverified",
-            "retained_reboot_state": "not implemented",
+            "retained_reboot_state": "RTC cold/warm classifier; common Tasmota settings; hardware validation required",
         }
         metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()
     if sdk_runtime:

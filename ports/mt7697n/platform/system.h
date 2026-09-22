@@ -9,6 +9,7 @@ enum class ResetReason : uint8_t {
   External = 6, Unknown = 7
 };
 void capture_reset_reason();
+bool prepare_restart();
 ResetReason reset_reason();
 const char* reset_reason_text();
 uint32_t free_heap();

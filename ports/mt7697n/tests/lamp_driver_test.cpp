@@ -19,7 +19,7 @@ struct Config {
   unsigned power=1;
   uint8_t light_color[5]={255,255,255,255,255};
   uint8_t param[1]={};
-  struct { bool pwm_multi_channels=false; } flag3;
+  struct { bool pwm_multi_channels=false, hass_tele_on_power=false; } flag3;
   struct { bool pwm_ct_mode=false; } flag4;
 } config;
 Config* Settings=&config;
@@ -27,6 +27,8 @@ struct {unsigned light_type=0,light_driver=0,save_data_counter=300; bool skip_li
 struct {int data_len=0,payload=-1;char* command=nullptr;} XdrvMailbox;
 template<class... T> void AddLog(T...) {}
 template<class... T> void Response_P(T...) {}
+unsigned state_publishes=0;
+void MqttPublishTeleState() { ++state_publishes; }
 template<class... T> void WSContentSend_P(T...) {}
 bool DecodeCommand(const char*,void(*const* commands)()) {commands[0]();return true;}
 unsigned ct_min,ct_max;
@@ -91,7 +93,11 @@ int main() {
   now=500;Xlgt12(FUNC_LOOP);
   assert(!Light.fade_running && duties[32]==4000 && !duties[33]);
   XdrvMailbox.data_len=1;XdrvMailbox.payload=1;
+  Settings->flag3.hass_tele_on_power=true;
   Xlgt12(FUNC_COMMAND);
+  assert(state_publishes==1);
+  CmndLampNight(); // Idempotent group selection does not publish a change.
+  assert(state_publishes==1);
   assert(Settings->lamp_night==1 && light_state.dimmer==5);
   Xlgt12(FUNC_SET_CHANNELS);
   assert(!duties[32] && !duties[33]);
