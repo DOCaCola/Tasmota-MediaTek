@@ -7,6 +7,9 @@ station networking, HTTP OTA, CCT/night PWM control and a paired BLE handheld.
 The default build now uses production logging settings; optional SDK and network
 traces are documented in [DIAGNOSTICS.md](DIAGNOSTICS.md). This does not imply
 that every feature or long-term hardware behavior has been validated.
+Existing Tasmota startup settings and the standard MQTT light commands are
+documented in [POWER_AND_MQTT.md](POWER_AND_MQTT.md), including the additional
+`LampNight` command and day/night state reporting.
 The separate probe targets remain SDK integration checks. No ESP8266/ESP32 macros are used to impersonate another MCU.
 
 ## Reproduce on Windows

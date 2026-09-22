@@ -28,6 +28,10 @@ hardware warm-restart and fully discharged cold-boot validation are also require
 The first boot of this feature initializes the marker; it cannot infer the
 previous firmware's restart intent.
 
+The reserved-SRAM build has passed a hardware software-restart test with
+PowerOnState 1 / SetOption0 1 and saved power OFF: it reported Software reset and
+remained off. Fully discharged cold-boot validation is still pending.
+
 ## MQTT interface
 
 MQTT is the standard Tasmota client and command dispatcher over plain TCP.
@@ -59,3 +63,7 @@ LampNight changes. Periodic telemetry follows TelePeriod; availability uses
 
 Use non-retained command messages for normal control. Retained commands replay
 on reconnect and can immediately override the local boot decision.
+
+Hardware tests with a temporary local broker verified these controls, state and
+availability messages, separate dimmer restoration, SetOption20, and night PWM
+readback. Original broker and light settings were restored after the test.
