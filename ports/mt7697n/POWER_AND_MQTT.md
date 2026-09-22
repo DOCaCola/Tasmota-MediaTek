@@ -14,20 +14,17 @@ Tasmota restart path.
 ## MT7697 reset classification
 
 The SDK whole-chip reset can clear the watchdog cause before application
-startup. Bytes 136..143 of the 144-byte RTC backup bank are reserved for a
-versioned session/restart marker. RTC read/write uses SDK HAL calls and
-readback. There are no added flash or eFuse writes.
+startup. A 16-byte NOLOAD region at SRAM address 0x2003FFF0 holds a versioned
+session/restart marker with complementary words. The linker excludes it from
+the stack and startup clearing. There are no added flash or eFuse writes.
 
-- No valid retained session, accessible RTC: power-on.
+- No valid retained session: power-on.
 - Retained requested-restart marker: software restart; immediately consumed.
 - Retained running session without a watchdog cause: unknown warm reset.
 - Hardware watchdog/software cause takes precedence.
-- RTC access/readback failure: Unknown, reported in RestartReason, preserving
-  the core's saved-state path. A failed restart-marker write logs an error.
 
-This relies on the YLXD01YL having no independent RTC backup battery.
-Application/SDK emulation validates register access and policy, but hardware
-warm-restart and fully discharged cold-boot validation are also required.
+Application/SDK emulation validates startup memory handling and policy, but
+hardware warm-restart and fully discharged cold-boot validation are also required.
 The first boot of this feature initializes the marker; it cannot infer the
 previous firmware's restart intent.
 

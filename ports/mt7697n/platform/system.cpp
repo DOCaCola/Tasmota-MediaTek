@@ -5,63 +5,56 @@ extern "C" {
 #include <FreeRTOS.h>
 #include <task.h>
 #include <hal_wdt.h>
-#include <hal_rtc.h>
 #include <hal_sys.h>
 extern char __FLASH_segment_start__, __FLASH_segment_end__, __exidx_end;
 }
 
+// Fixed, NOLOAD region excluded from the application stack and startup clearing.
+// The SDK bootloader uses low SRAM and switches SP without pushing before entry.
+extern "C" {
+__attribute__((section(".boot_retained"), used)) volatile uint32_t mt7697_boot_record[4];
+}
 namespace mt7697 {
 namespace {
 ResetReason boot_reason = ResetReason::Unknown;
-// The SDK's whole-chip reset loses WDT_STA. RTC backup survives that reset
-// but loses its contents when the lamp's supply is removed (no RTC battery).
-// Reserve the last eight of the SDK's 144 backup bytes; no flash/eFuse writes.
-constexpr uint16_t boot_offset = 136;
-constexpr uint32_t boot_magic = 0x31534154;  // "TAS1", retention format version.
-constexpr uint32_t running = 0x314E5552;     // "RUN1"
-constexpr uint32_t restarting = 0x31545352;  // "RST1"
-struct BootRecord { uint32_t magic, state; };
-bool retention_ok = false;
-bool write_boot_record(uint32_t state) {
-  const BootRecord record{boot_magic, state};
-  BootRecord readback{};
-  return hal_rtc_set_data(boot_offset, reinterpret_cast<const char*>(&record),
-                          sizeof(record)) == HAL_RTC_STATUS_OK &&
-         hal_rtc_get_data(boot_offset, reinterpret_cast<char*>(&readback),
-                          sizeof(readback)) == HAL_RTC_STATUS_OK &&
-         readback.magic == record.magic && readback.state == record.state;
+constexpr uint32_t boot_magic = 0x32534154;  // "TAS2", retention format version.
+constexpr uint32_t running = 0x314E5552;
+constexpr uint32_t restarting = 0x31545352;
+void write_boot_record(uint32_t state) {
+  mt7697_boot_record[0] = 0;  // Commit the signature last.
+  mt7697_boot_record[1] = ~boot_magic;
+  mt7697_boot_record[2] = state;
+  mt7697_boot_record[3] = ~state;
+  __sync_synchronize();
+  mt7697_boot_record[0] = boot_magic;
+  __sync_synchronize();
 }
 }
 void capture_reset_reason() {
-  BootRecord record{};
-  const bool readable =
-      hal_rtc_get_data(boot_offset, reinterpret_cast<char*>(&record),
-                       sizeof(record)) == HAL_RTC_STATUS_OK;
-  const bool retained = readable && record.magic == boot_magic &&
-      (record.state == running || record.state == restarting);
+  const uint32_t state = mt7697_boot_record[2];
+  const bool retained = mt7697_boot_record[0] == boot_magic &&
+      mt7697_boot_record[1] == ~boot_magic && mt7697_boot_record[3] == ~state &&
+      (state == running || state == restarting);
   switch (hal_wdt_get_reset_status()) {
     case HAL_WDT_TIMEOUT_RESET: boot_reason = ResetReason::Watchdog; break;
     case HAL_WDT_SOFTWARE_RESET: boot_reason = ResetReason::Software; break;
     default:
-      if (!readable) boot_reason = ResetReason::Unknown;
-      else if (!retained) boot_reason = ResetReason::PowerOn;
-      else if (record.state == restarting) boot_reason = ResetReason::Software;
+      if (!retained) boot_reason = ResetReason::PowerOn;
+      else if (state == restarting) boot_reason = ResetReason::Software;
       else boot_reason = ResetReason::Unknown;  // Unplanned reset while powered.
       break;
   }
-  // Consume the restart intent immediately; a later crash must not inherit it.
-  retention_ok = readable && write_boot_record(running);
-  if (!retention_ok) boot_reason = ResetReason::Unknown;
+  // Consume intent immediately; subsequent unplanned resets remain distinct.
+  write_boot_record(running);
 }
-bool prepare_restart() { return retention_ok && write_boot_record(restarting); }
+void prepare_restart() { write_boot_record(restarting); }
 ResetReason reset_reason() { return boot_reason; }
 const char* reset_reason_text() {
   switch (boot_reason) {
     case ResetReason::PowerOn: return "Power on";
     case ResetReason::Watchdog: return "Watchdog";
     case ResetReason::Software: return "Software reset";
-    default: return retention_ok ? "Unknown (retained powered session)" :
-                                  "Unknown (RTC backup unavailable)";
+    default: return "Unknown (retained powered session)";
   }
 }
 uint32_t free_heap() { return xPortGetFreeHeapSize(); }

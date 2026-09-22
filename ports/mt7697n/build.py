@@ -245,6 +245,7 @@ def main():
     if options.platform and not options.application:
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
     if options.platform:
+        link += ["-T" + (HERE / "boot_retention.ld").as_posix()]
         link += ["-Wl,--wrap=wifi_init"]
         if options.network_trace:
             link += ["-Wl,--wrap=tcpip_input", "-Wl,--wrap=tcp_input"]
@@ -313,7 +314,7 @@ def main():
             "wifi_mqtt_settings": "implemented; hardware unverified",
             "gpio_pwm": "dedicated YLXD01YL CCT/night PWM driver; electrical validation pending",
             "ota": "HTTP IPv4 download, verified staging and Upgrade command implemented; hardware unverified",
-            "retained_reboot_state": "RTC cold/warm classifier; common Tasmota settings; hardware validation required",
+            "retained_reboot_state": "reserved-SRAM cold/warm classifier; common Tasmota settings; hardware validation required",
         }
         metadata["ctags_sha256"] = hashlib.sha256(options.ctags.read_bytes()).hexdigest()
     if sdk_runtime:
