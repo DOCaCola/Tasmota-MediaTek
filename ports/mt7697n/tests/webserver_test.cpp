@@ -13,6 +13,8 @@ static bool pending, connected, bind_fail, blocked_send;
 static unsigned now, calls;
 static unsigned send_failures,close_failures,listener_close_failures,accepts;
 static int send_error=ENOMEM;
+static int incoming_fd=2;
+static bool open_fd[8]={},eof=false;
 uint32_t millis() { return now; }
 void delay(unsigned long n) { now+=n; }
 extern "C" {
@@ -23,13 +25,15 @@ int lwip_bind(int,const sockaddr*,socklen_t) {return bind_fail?-1:0;}
 int lwip_listen(int,int) {return 0;}
 int lwip_accept(int,sockaddr*,socklen_t*) {
   if (!pending) {errno=EAGAIN;return -1;}
-  assert(!connected);
-  ++accepts;pending=false;connected=true;return 2;
+  assert(!open_fd[incoming_fd]);
+  open_fd[incoming_fd]=true;
+  ++accepts;pending=false;connected=true;return incoming_fd;
 }
 int lwip_close(int fd) {
   if(fd==1 && listener_close_failures) {--listener_close_failures;errno=ENOMEM;return -1;}
   if(fd==2 && close_failures) {--close_failures;errno=ENOMEM;return -1;}
-  if(fd==2)connected=false;
+  if(fd>=2)open_fd[fd]=false;
+  connected=open_fd[incoming_fd];
   return 0;
 }
 uint16_t lwip_htons(uint16_t n) {return (n>>8)|(n<<8);}
@@ -38,10 +42,14 @@ int lwip_send(int,const void* data,size_t n,int) {
   if(blocked_send){errno=EAGAIN;return -1;}
   n=std::min(n,send_limit);outgoing.append(static_cast<const char*>(data),n);return n;
 }
-int lwip_recv(int,void* data,size_t n,int) {
+int lwip_recv(int fd,void* data,size_t n,int flags) {
+  if(fd!=incoming_fd) {errno=EAGAIN;return -1;}
+  if(eof && position==incoming.size()) return 0;
   if(position==incoming.size()){errno=EAGAIN;return -1;}
   n=std::min({n,fragment,incoming.size()-position});
-  memcpy(data,incoming.data()+position,n);position+=n;return n;
+  memcpy(data,incoming.data()+position,n);
+  if(!(flags&MSG_PEEK))position+=n;
+  return n;
 }
 }
 static TasmotaWebServer server(80);
@@ -87,6 +95,8 @@ static void auth() {
 }
 static void request(const std::string& input,size_t split=4096) {
   incoming=input;position=0;outgoing.clear();fragment=split;pending=true;
+  auto line=incoming.find("\r\n");
+  if(line!=std::string::npos)incoming.insert(line+2,"Connection: close\r\n");
   for(unsigned i=0;i<20000 && (pending || connected);++i) {
     const auto before=now;server.handleClient();
     assert(now==before); // No delay loop, including resource-pressure paths.
@@ -165,5 +175,29 @@ int main() {
   for(unsigned i=0;i<1100;++i) {server.handleClient();++now;}
   assert(server.listening() && !connected);
   request("GET / HTTP/1.1\r\n\r\n");server.close();
+  server.begin();
+  const unsigned accepted_before=accepts;
+  for(unsigned i=0;i<1000;++i) {
+    incoming="GET / HTTP/1.1\r\n\r\n";position=0;outgoing.clear();pending=(i==0);
+    for(unsigned j=0;j<100 && outgoing.find("0\r\n\r\n")==std::string::npos;++j) {
+      auto before=now;server.handleClient();assert(now==before);++now;
+    }
+    assert(outgoing.find("Connection: keep-alive\r\n")!=std::string::npos);
+    assert(outgoing.substr(outgoing.size()-5)=="0\r\n\r\n");
+    assert(open_fd[2]);
+  }
+  assert(accepts==accepted_before+1); // No per-request TIME_WAIT allocation.
+  server.handleClient(); // Park first browser.
+  incoming_fd=3;connected=false;
+  request("GET / HTTP/1.1\r\n\r\n");
+  assert(open_fd[2] && !open_fd[3]); // Idle first browser doesn't block second.
+  incoming_fd=2;eof=true;server.handleClient();eof=false;
+  assert(!open_fd[2]);
+  incoming="GET / HTTP/1.1\r\n\r\n";position=0;outgoing.clear();pending=true;
+  for(unsigned i=0;i<100;++i) {server.handleClient();++now;}
+  assert(open_fd[2]);
+  now+=15001;close_failures=1;server.handleClient();
+  assert(open_fd[2]);server.handleClient();assert(!open_fd[2]);
+  server.close();
   puts("Native webserver: fragmented forms, chunked output, authentication, framing rejection, timeouts and recovery passed.");
 }

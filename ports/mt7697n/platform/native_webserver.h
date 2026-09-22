@@ -30,6 +30,7 @@ class NativeWebClient {
   size_t offset_=0,queued_=0;
   uint32_t progress_=0;
   bool finishing_=false,closing_=false,failed_=false;
+  bool keep_alive_=false,reusable_=false;
   size_t failure_offset_=0;
   int socket_ = -1;
   IPAddress peer_;
@@ -75,6 +76,8 @@ class TasmotaWebServer {
   uint32_t last_open_=0;
   int port_, listener_ = -1;
   NativeWebClient client_;
+  NativeWebClient idle_[3];
+  unsigned idle_cursor_=0;
   Route routes_[32];
   unsigned route_count_ = 0;
   void (*missing_)() = nullptr;

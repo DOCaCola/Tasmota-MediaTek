@@ -46,12 +46,12 @@ size_t NativeWebClient::write(const char* data, size_t size) {
   if (socket_<0 || failed_ || finishing_) return 0;
   // Stage the complete response before transmission: allocation/size failures
   // produce a complete 503, never a header followed by truncated HTML.
-  if (size>32768-queued_) { clear();failed_=true;++statistics.queue_failures;return 0; }
+  if (size>32768-queued_) { clear();failed_=true;keep_alive_=false;++statistics.queue_failures;return 0; }
   size_t copied=0;
   while (copied<size) {
     if (!tail_ || tail_->size==sizeof(tail_->data)) {
       auto* block=static_cast<Block*>(malloc(sizeof(Block)));
-      if (!block) { clear();failed_=true;++statistics.queue_failures;return 0; }
+      if (!block) { clear();failed_=true;keep_alive_=false;++statistics.queue_failures;return 0; }
       block->next=nullptr;block->size=0;
       if (tail_) tail_->next=block;else head_=block;
       tail_=block;
@@ -74,7 +74,7 @@ void NativeWebClient::clear() {
   tail_=nullptr;offset_=queued_=0;
 }
 void NativeWebClient::abortResponse() {
-  clear();finishing_=closing_=true;failed_=false;
+  clear();finishing_=closing_=true;failed_=keep_alive_=reusable_=false;
 }
 void NativeWebClient::release() {
   if (socket_>=0 && lwip_close(socket_)<0 && errno!=EBADF) {
@@ -83,7 +83,7 @@ void NativeWebClient::release() {
     // retry on a later main-loop pass rather than leaking it.
     return;
   }
-  socket_=-1;finishing_=closing_=failed_=false;failure_offset_=0;
+  socket_=-1;finishing_=closing_=failed_=keep_alive_=reusable_=false;failure_offset_=0;
 }
 void NativeWebClient::pump() {
   if (socket_<0 || !finishing_) return;
@@ -117,7 +117,11 @@ void NativeWebClient::pump() {
       abortResponse();
     }
   }
-  if (!closing_ && !head_ && !failed_) { closing_=true;++statistics.completed; }
+  if (!closing_ && !head_ && !failed_) {
+    ++statistics.completed;
+    if (keep_alive_) { finishing_=false;reusable_=true;return; }
+    closing_=true;
+  }
   if (closing_) release();
 }
 void TasmotaWebServer::on(const char* uri, HTTPMethod method, void (*handler)()) {
@@ -144,6 +148,7 @@ void TasmotaWebServer::openListener() {
 void TasmotaWebServer::close() {
   wanted_=listener_ready_=false;
   client_.abortResponse();client_.release();
+  for (auto& idle:idle_) { idle.abortResponse();idle.release(); }
   releaseListener();
 }
 void TasmotaWebServer::releaseListener() {
@@ -180,6 +185,7 @@ bool TasmotaWebServer::parse() {
   char* path=strchr(request_,' '); if (!path) return false; *path++=0;
   char* version=strchr(path,' '); if (!version) return false; *version++=0;
   if (strcmp(version,"HTTP/1.1") && strcmp(version,"HTTP/1.0")) return false;
+  const bool http11=!strcmp(version,"HTTP/1.1");
   if (!strcmp(request_,"GET")) method_=HTTP_GET;
   else if (!strcmp(request_,"POST")) method_=HTTP_POST;
   else if (!strcmp(request_,"HEAD")) method_=HTTP_HEAD;
@@ -197,6 +203,9 @@ bool TasmotaWebServer::parse() {
     headers_[header_count_++]={String(p),String(colon)};
     p=next+2;
   }
+  String connection=header("Connection");
+  connection.toLowerCase();
+  client_.keep_alive_=http11 && connection.indexOf("close")<0;
   if (query && !parseArgs(query)) return false;
   if (method_==HTTP_POST) {
     String type=header("Content-Type");
@@ -206,11 +215,48 @@ bool TasmotaWebServer::parse() {
   return true;
 }
 void TasmotaWebServer::handleClient() {
+  // Keep only idle sockets here: request parsing and response generation retain
+  // one owner, while idle browsers cannot monopolize the server.
+  for (auto& idle:idle_) {
+    if (idle.closing_) idle.release();
+    if (idle.socket_>=0 && uint32_t(millis()-idle.progress_)>=15000) {
+      idle.abortResponse();idle.release();
+    }
+  }
+  if (client_.reusable_) {
+    bool parked=false;
+    for (auto& idle:idle_) {
+      if (idle.socket_<0) {
+        idle.socket_=client_.socket_;idle.peer_=client_.peer_;idle.progress_=millis();
+        client_.socket_=-1;client_.reusable_=client_.keep_alive_=false;
+        parked=true;break;
+      }
+    }
+    if (!parked) { client_.abortResponse();client_.release(); }
+  }
   if (client_.finishing_) { client_.pump();return; }
   if (!listener_ready_) {
     releaseListener();
     if (wanted_ && uint32_t(millis()-last_open_)>=1000) openListener();
     return;
+  }
+  if (client_.socket_<0) {
+    // Round-robin ready persistent connections. Peek never consumes bytes;
+    // normal framing/parser validation still owns the entire request.
+    for (unsigned i=0;i<3;++i) {
+      auto& idle=idle_[(idle_cursor_+i)%3];
+      if (idle.socket_<0 || idle.closing_) continue;
+      char byte;
+      int n=lwip_recv(idle.socket_,&byte,1,MSG_PEEK|MSG_DONTWAIT);
+      if (n==0 || (n<0 && errno!=EAGAIN && errno!=EWOULDBLOCK)) {
+        idle.abortResponse();idle.release();continue;
+      }
+      if (n>0) {
+        reset();client_.socket_=idle.socket_;client_.peer_=idle.peer_;
+        idle.socket_=-1;started_=millis();idle_cursor_=(idle_cursor_+i+1)%3;
+        break;
+      }
+    }
   }
   if (client_.socket_<0) {
     sockaddr_in peer={};socklen_t length=sizeof(peer);
@@ -252,13 +298,14 @@ void TasmotaWebServer::handleClient() {
   }
   if (received_<expected_) return;
   if (received_!=expected_ || !parse()) {
+    client_.keep_alive_=false;
     send(400,"text/plain","Invalid or unsupported request");client_.stop();return;
   }
   void (*handler)()=missing_;
   for (unsigned i=0;i<route_count_;++i)
     if (routes_[i].uri==uri_ && (routes_[i].method==HTTP_ANY || routes_[i].method==method_)) {handler=routes_[i].handler;break;}
   if (handler) handler(); else send(404,"text/plain","Not found");
-  client_.stop(); // One request per connection; no pipelining.
+  client_.stop(); // Finish this response; reusable sockets return to the idle set.
 }
 String TasmotaWebServer::arg(const String& name) const {
   for (unsigned i=0;i<arg_count_;++i) if (arguments_[i].name==name) return arguments_[i].value;
@@ -297,7 +344,9 @@ void TasmotaWebServer::sendHeader(const String& name,const String& value,bool fi
 }
 void TasmotaWebServer::send(int code,const char* type,const String& body) {
   chunked_=content_length_==CONTENT_LENGTH_UNKNOWN;
-  String h="HTTP/1.1 "+String(code)+" Response\r\nContent-Type: "+type+"\r\nConnection: close\r\n";
+  String h="HTTP/1.1 "+String(code)+" Response\r\nContent-Type: "+type;
+  h+=client_.keep_alive_ ? "\r\nConnection: keep-alive\r\nKeep-Alive: timeout=15\r\n" :
+                         "\r\nConnection: close\r\n";
   if (chunked_) h+="Transfer-Encoding: chunked\r\n";
   else h+="Content-Length: "+String(static_cast<unsigned long>(content_length_?content_length_:body.length()))+"\r\n";
   h+=response_headers_+"\r\n";

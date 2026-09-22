@@ -4459,13 +4459,14 @@ void CmndTcpStatus(void) {
   Response_P(PSTR("{\"TcpStatus\":{\"Valid\":%s,\"Ingress\":%u,\"InputErrors\":%u,"
     "\"Processed\":%u,\"BadChecksum\":%u,\"Advanced\":%u,\"Active\":%u,\"TimeWait\":%u,"
     "\"Queued\":%u,\"Retransmitted\":%u,\"PowerSave\":%d,\"Last\":[%u,%u,%u,%u,%u,%u],"
-    "\"Stalled\":[%u,%u,%u,%u],\"Rejected\":[%u,%u,%u,%u,%u,%u,%u]}}"),
+    "\"Stalled\":[%u,%u,%u,%u],\"Rejected\":[%u,%u,%u,%u,%u,%u,%u],"
+    "\"PoolUsed\":%u,\"PoolPeak\":%u,\"PoolErrors\":%u}}"),
     ok?"true":"false",s.ingress,s.input_errors,s.processed,s.bad_checksum,s.advanced,
     s.active,s.timewait,s.queued,s.retransmitted,s.power_save,s.last_port,s.last_seq,
     s.last_rxnext,s.last_ack,s.before_ack,s.after_ack,
     s.stalled_port,s.stalled_ack,s.stalled_next,s.stalled_queue,
     s.rejected,s.rejected_port,s.rejected_seq,s.rejected_rxnext,
-    s.rejected_ack,s.rejected_before,s.rejected_next);
+    s.rejected_ack,s.rejected_before,s.rejected_next,s.pool_used,s.pool_peak,s.pool_errors);
 }
 void CmndWebStatus(void) {
   const auto& s=NativeWebStatistics();

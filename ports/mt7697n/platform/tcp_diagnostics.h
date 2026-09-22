@@ -11,6 +11,7 @@ struct TcpDiagnostics {
   uint32_t rejected=0,rejected_port=0,rejected_seq=0,rejected_rxnext=0;
   uint32_t rejected_ack=0,rejected_before=0,rejected_next=0;
   int power_save=-1;
+  uint32_t pool_used=0,pool_peak=0,pool_errors=0;
 };
 bool tcp_diagnostics(TcpDiagnostics& output);
 void record_tcp_ingress(const uint8_t* header,unsigned length,int error);

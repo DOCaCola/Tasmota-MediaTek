@@ -11,6 +11,7 @@ struct sockaddr_in { unsigned short sin_family, sin_port; struct { uint32_t s_ad
 #define SO_REUSEADDR 2
 #define FIONBIO 3
 #define MSG_DONTWAIT 4
+#define MSG_PEEK 8
 int lwip_ioctl(int, int, void*);
 int lwip_socket(int,int,int);
 int lwip_setsockopt(int,int,int,const void*,socklen_t);

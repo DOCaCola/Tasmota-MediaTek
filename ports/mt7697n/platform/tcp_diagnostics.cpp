@@ -8,6 +8,9 @@ extern "C" {
 #include <lwip/sys.h>
 #include <wifi_private_api.h>
 void __real_tcp_input(struct pbuf*,struct netif*);
+// The prebuilt SDK uses 16-bit mem_size_t (36 KiB heap), unlike the
+// distribution's TGN-enabled headers. Verified against linked SDK DWARF.
+extern const uint16_t sdk_lwip_stats[] asm("lwip_stats");
 }
 namespace {
 std::atomic<unsigned> ingress{0},input_errors{0};
@@ -26,6 +29,8 @@ void snapshot(void* arg) {
     }
   }
   for(auto* p=tcp_tw_pcbs;p;p=p->next) ++state.timewait;
+  state.pool_used=sdk_lwip_stats[86];state.pool_peak=sdk_lwip_stats[87];
+  state.pool_errors=sdk_lwip_stats[84];
   *r.out=state;sys_sem_signal(&r.done);
 }
 }
