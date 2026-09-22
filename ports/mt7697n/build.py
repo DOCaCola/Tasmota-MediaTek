@@ -264,6 +264,8 @@ def main():
                         str(elf), *(["--network-trace"] if options.network_trace else []),
                         *(["--sdk-logs"] if options.sdk_logs else [])],
                        check=True)
+        subprocess.run([sys.executable, str(HERE / "tests/ota_activation_arm_test.py"),
+                        str(elf)], check=True)
     binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
     if options.platform:

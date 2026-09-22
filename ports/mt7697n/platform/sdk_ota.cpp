@@ -61,9 +61,11 @@ class SdkOtaFlash final : public OtaFlash {
     return result == HAL_FLASH_STATUS_OK;
   }
   bool activate() override {
-    taskENTER_CRITICAL();
+    // This high-level SDK routine logs before and after writing the marker.
+    // Its logger may block on a full queue: masking the scheduler here prevents
+    // that queue from draining and can hang after the marker is committed.
+    // The SDK flash driver owns the SFC lock and masks its hardware commands.
     const auto result = fota_trigger_update();
-    taskEXIT_CRITICAL();
     return result == FOTA_TRIGGER_SUCCESS;
   }
 };
