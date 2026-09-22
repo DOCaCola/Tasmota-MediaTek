@@ -8,8 +8,8 @@ extern "C" {
 #include <task.h>
 #include <queue.h>
 #include <task_def.h>
-#include <hal_efuse.h>
 #include <hal_trng.h>
+#include <wifi_api.h>
 #include <nvdm.h>
 #include <bt_system.h>
 #include <bt_gap_le.h>
@@ -58,7 +58,7 @@ Advertisement peer{};
 uint16_t peer_pid=0;
 Authentication authentication;
 Op pending_op=Op::None;
-uint8_t public_address[6], random_address[6];
+uint8_t public_address[6];
 bt_gap_le_local_key_t local_key{};
 alignas(4) char tx_buffer[256], rx_buffer[1024];
 alignas(4) char timer_buffer[10*BT_CONTROL_BLOCK_SIZE_OF_TIMER];
@@ -186,10 +186,9 @@ bool data_status(uint32_t s) {
 void control(const Event& e) {
   if (state==Starting && e.message==BT_POWER_ON_CNF) {
     if (e.status) { fail(e.status); return; }
-    transition(Address); accepted(bt_gap_le_set_random_address(random_address)); return;
-  }
-  if (state==Address && e.message==BT_GAP_LE_SET_RANDOM_ADDRESS_CNF) {
-    if (e.status) fail(e.status); else scan();
+    // SDK bt_task warms the TRNG, creates a static-random address and passes
+    // both addresses to bt_power_on before delivering this confirmation.
+    scan();
     return;
   }
   if (e.message==BT_GAP_LE_SET_SCAN_CNF &&
@@ -359,11 +358,14 @@ bool start(uint32_t now) {
   }
   for (const auto& d:records.device)
     if (d.pid && d.pid!=0x153 && d.pid!=0x3b6) { counters.last_error=Storage; state=Fault; return false; }
-  if (hal_efuse_read(0x1a,public_address,6)!=HAL_EFUSE_OK ||
-      !random_bytes(random_address,6) || !random_bytes(&local_key,sizeof(local_key))) {
-    state=Fault; counters.last_error=Random; return false;
+  // YLXD01YL's SDK Bluetooth eFuse address field is unprogrammed. Use its
+  // existing assigned interface identity for the controller's public address;
+  // actual scanning/connecting uses the SDK's separately generated random one.
+  const auto address_result=wifi_config_get_mac_address(WIFI_PORT_STA,public_address);
+  if (address_result<0) { state=Fault; counters.last_error=uint32_t(address_result); return false; }
+  for (unsigned i=0;i<3;++i) {
+    const uint8_t t=public_address[i]; public_address[i]=public_address[5-i]; public_address[5-i]=t;
   }
-  random_address[5]|=0xc0; // Bluetooth static random address, not a public MAC.
   uint8_t any=0, all=0xff;
   for (auto v:public_address) { any|=v; all&=v; }
   if (!any || all==0xff) { state=Fault; counters.last_error=BadEvent; return false; }
@@ -485,6 +487,7 @@ extern "C" bt_status_t bt_app_event_callback(bt_msg_type_t message,bt_status_t s
   return BT_STATUS_SUCCESS;
 }
 extern "C" bt_gap_le_local_config_req_ind_t* bt_gap_le_get_local_config(void) {
+  // Local SMP key material is unused: SMP pairing is explicitly rejected below.
   static bt_gap_le_local_config_req_ind_t config={&mt7697::remote::local_key,false};
   return &config;
 }

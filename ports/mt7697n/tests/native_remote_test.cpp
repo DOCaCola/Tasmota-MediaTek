@@ -28,7 +28,10 @@ int xQueueReceive(QueueHandle_t q,void* p,unsigned) {
 void vQueueDelete(QueueHandle_t q) { delete static_cast<FakeQueue*>(q); }
 int xTaskCreate(void (*)(void*),const char*,unsigned,void*,unsigned,TaskHandle_t* t) { *t=reinterpret_cast<void*>(1); return 1; }
 void bt_task(void*) {}
-int hal_efuse_read(uint32_t offset,uint8_t* p,uint32_t n) { assert(offset==0x1a && n==6); memset(p,0x12,n); return 0; }
+int32_t wifi_config_get_mac_address(uint8_t port,uint8_t* p) {
+  assert(port==WIFI_PORT_STA);
+  const uint8_t mac[]={0x78,0x11,0xdc,0xab,0xae,0x7d}; memcpy(p,mac,6); return 0;
+}
 int hal_trng_init(void) { return 0; }
 int hal_trng_get_generated_random_number(uint32_t* p) { *p=0x12345678; return 0; }
 int hal_trng_deinit(void) { return 0; }
@@ -98,7 +101,9 @@ static void begin_pair() {
 }
 int main() {
   assert(start(now));
-  event(BT_POWER_ON_CNF); event(BT_GAP_LE_SET_RANDOM_ADDRESS_CNF); event(BT_GAP_LE_SET_SCAN_CNF);
+  const uint8_t address[]={0x7d,0xae,0xab,0xdc,0x11,0x78};
+  assert(!memcmp(public_address,address,6));
+  event(BT_POWER_ON_CNF); event(BT_GAP_LE_SET_SCAN_CNF);
   assert(state==Scanning && !pair(now,121));
   begin_pair();
   event(BT_GATTC_WRITE_CHARC,0,connection); // hello -> subscription

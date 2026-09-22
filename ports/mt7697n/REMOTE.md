@@ -6,6 +6,13 @@ Scanning is passive, with controller duplicate filtering disabled. Radio callbac
 copy bounded data; authentication, key storage, decryption and light commands
 run from the Tasmota main task.
 
+This lamp has no programmed Bluetooth address in the SDK's expected eFuse
+field. The controller public identity uses its existing Wi-Fi MAC (converted
+to Bluetooth byte order). Scanning and connections use the separate static-random
+address created by SDK `bt_task` after its TRNG warm-up. No eFuse access or
+invented factory address is required. SMP pairing is disabled; local SMP keys
+are not used.
+
 ## Commands
 
 | Command | Meaning |
