@@ -44,6 +44,7 @@ if __name__ == "__main__":
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)
     subprocess.run([sys.executable, str(HERE / "package_test.py")], check=True)
+    subprocess.run([sys.executable, str(HERE / "remote_test.py"), "--cxx", options.cxx], check=True)
     for name, sources in (
         ("lamp", [HERE / "lamp_test.cpp"]),
         ("fade", [HERE / "fade_test.cpp"]),

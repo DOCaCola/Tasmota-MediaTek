@@ -151,6 +151,8 @@ def main():
         bear = HERE.parents[1] / "lib/lib_ssl/bearssl-esp8266/src"
         flags += ["-I" + bear.as_posix()]
         sources += [bear / p for p in ("hash/sha1.c", "codec/enc32be.c", "codec/dec32be.c")]
+        sources += [bear / p for p in ("aead/ccm.c", "symcipher/aes_common.c",
+                    "symcipher/aes_small_enc.c", "symcipher/aes_small_ctrcbc.c")]
         sources = [p for p in sources if p.name != "variant_delay.c"]
         sources += sorted((HERE / "platform").glob("*.cpp"))
         sources += [HERE / "core_layout.cpp"]
