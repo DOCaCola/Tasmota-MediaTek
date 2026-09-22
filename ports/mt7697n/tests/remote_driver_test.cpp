@@ -14,7 +14,7 @@
 using std::max;
 template<class T> T constrain(T x,T lo,T hi) { return std::max(lo,std::min(x,hi)); }
 static size_t strlcpy(char* p,const char* s,size_t n) { snprintf(p,n,"%s",s); return strlen(s); }
-enum {SRC_BUTTON,LOG_LEVEL_INFO,LOG_LEVEL_ERROR,FUNC_LOOP,FUNC_COMMAND};
+enum {SRC_BUTTON,LOG_LEVEL_INFO,LOG_LEVEL_ERROR,LOG_LEVEL_DEBUG,FUNC_LOOP,FUNC_COMMAND};
 struct { bool lamp_night=false; } settings;
 auto* Settings=&settings;
 struct { int data_len=0,payload=0; } XdrvMailbox;

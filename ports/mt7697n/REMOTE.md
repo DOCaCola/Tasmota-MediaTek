@@ -75,6 +75,9 @@ queue/allocation failure, authentication protocol, random/address initialization
 and missing/incompatible GATT handles. Other values are SDK errors.
 The last error is retained for diagnosis even after successful scan recovery.
 A startup or cleanup fault requires a device restart; it is not silently retried.
+Routine numeric state transitions use DEBUG logging only in `--network-trace`
+builds. Receiver startup, successful
+pairing and pairing/fault errors remain visible at INFO/ERROR levels.
 
 Bounded resources: 16 advertising events, 8 control events, 8 light actions,
 two SDK connection control blocks, ten SDK timers, 256-byte TX and 1024-byte

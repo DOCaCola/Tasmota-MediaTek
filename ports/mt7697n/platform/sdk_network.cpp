@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "sdk_network.h"
 #include "wifi_startup.h"
+#ifdef MT7697_NETWORK_TRACE
 #include "rx_trace.h"
+#endif
 #include <variant.h>
 #include <string.h>
-#include <stdio.h>
 extern "C" {
 #include <wifi_api.h>
 #include <wifi_private_api.h>
@@ -26,7 +27,10 @@ bool dhcp_running = false;
 // Main-task requests are serialized through the TCP/IP mailbox. No Arduino
 // station callbacks are registered: their AP/STA event handling is ambiguous.
 struct Request { bool link; bool reset; bool online; bool ok; sys_sem_t done;
-  unsigned dhcp_state; unsigned dhcp_tries; };
+#ifdef MT7697_NETWORK_TRACE
+  unsigned dhcp_state; unsigned dhcp_tries;
+#endif
+};
 void update_interface(void* argument) {
   auto& request = *static_cast<Request*>(argument);
   netif* sta = netif_find_by_type(NETIF_TYPE_STA);
@@ -41,13 +45,17 @@ void update_interface(void* argument) {
       netif_set_up(sta);
       netif_set_link_up(sta);
       const int result = dhcp_start(sta);
-      printf("NET: station DHCP start result=%d\n",result);
+#ifdef MT7697_NETWORK_TRACE
+      network_trace_printf("NET: station DHCP start result=%d\n",result);
+#endif
       request.ok = result == ERR_OK;
       dhcp_running = request.ok;
       if (!request.ok) netif_set_link_down(sta);
     }
+#ifdef MT7697_NETWORK_TRACE
     request.dhcp_state = sta->dhcp ? sta->dhcp->state : 0;
     request.dhcp_tries = sta->dhcp ? sta->dhcp->tries : 0;
+#endif
     request.online = request.link && !request.reset && request.ok &&
         dhcp_supplied_address(sta) && !ip4_addr_isany_val(sta->ip_addr);
     // The directly connected AP subnet retains its route; external traffic
@@ -57,7 +65,8 @@ void update_interface(void* argument) {
   sys_sem_signal(&request.done);
 }
 bool interface_request(bool link, bool reset, bool* online = nullptr) {
-  Request request{link, reset, false, false, {}, 0, 0};
+  Request request{};
+  request.link=link;request.reset=reset;
   if (sys_sem_new(&request.done, 0) != ERR_OK) return false;
   if (tcpip_callback(update_interface, &request) != ERR_OK) {
     sys_sem_free(&request.done);
@@ -65,9 +74,10 @@ bool interface_request(bool link, bool reset, bool* online = nullptr) {
   }
   sys_arch_sem_wait(&request.done, 0);
   sys_sem_free(&request.done);
+#ifdef MT7697_NETWORK_TRACE
   static unsigned last_state = ~0u, last_tries = ~0u;
   if (request.dhcp_state != last_state || request.dhcp_tries != last_tries) {
-    printf("NET: station link=%u DHCP state=%u tries=%u lease=%u\n",
+    network_trace_printf("NET: station link=%u DHCP state=%u tries=%u lease=%u\n",
         unsigned(link),request.dhcp_state,request.dhcp_tries,unsigned(request.online));
     last_state=request.dhcp_state;last_tries=request.dhcp_tries;
     report_network_rx();
@@ -78,12 +88,13 @@ bool interface_request(bool link, bool reset, bool* online = nullptr) {
       const int cr=wifi_config_get_channel(WIFI_PORT_STA,&channel);
       const int fr=wifi_config_get_rx_filter(&filter);
       if (br>=0 && cr>=0 && fr>=0)
-        printf("NET: BSSID=%02X:%02X:%02X:%02X:%02X:%02X channel=%u RX filter=%08lX\n",
+        network_trace_printf("NET: BSSID=%02X:%02X:%02X:%02X:%02X:%02X channel=%u RX filter=%08lX\n",
             bssid[0],bssid[1],bssid[2],bssid[3],bssid[4],bssid[5],channel,
             static_cast<unsigned long>(filter));
-      else printf("NET: radio diagnostic errors bssid=%d channel=%d filter=%d\n",br,cr,fr);
+      else network_trace_printf("NET: radio diagnostic errors bssid=%d channel=%d filter=%d\n",br,cr,fr);
     }
   }
+#endif
   if (online) *online = request.online;
   return request.ok;
 }
@@ -145,7 +156,9 @@ bool station_online() {
   }
   if (!ip_ready_notified) {
     const int result = wifi_connection_inform_ip_ready();
-    printf("NET: station lease bound, radio IP-ready result=%d\n",result);
+#ifdef MT7697_NETWORK_TRACE
+    network_trace_printf("NET: station lease bound, radio IP-ready result=%d\n",result);
+#endif
     if (result < 0) return false;
     ip_ready_notified = true;
   }

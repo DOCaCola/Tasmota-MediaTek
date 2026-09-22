@@ -3,7 +3,9 @@
 #include "tcp_diagnostics.h"
 #include <atomic>
 #include <stdio.h>
+#include <stdarg.h>
 extern "C" {
+#include <hal_uart.h>
 #include <lwip/netif.h>
 #include <lwip/pbuf.h>
 #include <lwip/tcpip.h>
@@ -28,8 +30,18 @@ extern "C" err_t __wrap_tcpip_input(struct pbuf* packet, struct netif* iface) {
   return result;
 }
 namespace mt7697 {
+void network_trace_printf(const char* format, ...) {
+  // Separate from SDK stdout so tracing does not enable vendor printf chatter.
+  char line[256];
+  va_list args;
+  va_start(args,format);
+  const int length=vsnprintf(line,sizeof(line),format,args);
+  va_end(args);
+  for (int i=0;i<length && i<int(sizeof(line)-1);++i)
+    hal_uart_put_char(HAL_UART_0,line[i]);
+}
 void report_network_rx() {
-  printf("NET: RX frames STA=%u AP=%u DHCP replies STA=%u AP=%u\n",
+  network_trace_printf("NET: RX frames STA=%u AP=%u DHCP replies STA=%u AP=%u\n",
       station_frames.load(),ap_frames.load(),station_dhcp.load(),ap_dhcp.load());
 }
 }

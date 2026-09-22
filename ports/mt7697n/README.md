@@ -2,12 +2,17 @@
 
 This directory starts a native platform port on Tasmota commit
 `8a7e815f6de5ad3822e9f28dd06f72d442e90c6c`, branch `mt7697n-ylxd01yl`.
-**The full Tasmota development application now compiles and links.** It has
-not run on the lamp. Native HTTP OTA is implemented; GPIO/PWM controls are unavailable in this
-bring-up build; the Wi-Fi/settings/MQTT milestone is not yet demonstrated.
+The native application has run on the lamp with Wi-Fi setup AP/web configuration,
+station networking, HTTP OTA, CCT/night PWM control and a paired BLE handheld.
+The default build now uses production logging settings; optional SDK and network
+traces are documented in [DIAGNOSTICS.md](DIAGNOSTICS.md). This does not imply
+that every feature or long-term hardware behavior has been validated.
 The separate probe targets remain SDK integration checks. No ESP8266/ESP32 macros are used to impersonate another MCU.
 
 ## Reproduce on Windows
+
+Application builds run linked-image and ARM startup checks. Install their Python
+dependencies with `python -m pip install -r ports/mt7697n/tests/requirements-arm.txt`.
 
 Radio country is a build-time setting in `port_config.h`:
 

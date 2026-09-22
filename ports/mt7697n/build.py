@@ -40,6 +40,10 @@ def main():
     parser.add_argument("--platform", action="store_true",
                         help="Link native network/settings services; no flash writes are invoked")
     parser.add_argument("--application", action="store_true", help="Build the complete native Tasmota application")
+    parser.add_argument("--network-trace", action="store_true",
+                        help="Enable packet/ACK and DHCP tracing (native platform only)")
+    parser.add_argument("--sdk-logs", action="store_true",
+                        help="Enable vendor SDK logs and raw SDK UART stdout")
     parser.add_argument("--ctags", type=Path,
                         default=Path(os.environ.get("LOCALAPPDATA", ".")) /
                         "Arduino15/packages/builtin/tools/ctags/5.8-arduino11/ctags.exe",
@@ -54,6 +58,8 @@ def main():
         options.platform = True
     if options.platform:
         options.dependencies = True
+    if options.network_trace and not options.platform:
+        parser.error("--network-trace requires --platform or --application")
     if options.dependencies:
         if options.compiler != "gcc13-sdk-runtime":
             parser.error("--dependencies requires --compiler gcc13-sdk-runtime")
@@ -76,6 +82,10 @@ def main():
     elif options.compiler == "gcc10":
         TOOLS = WORK / "vendor/gcc10/xpack-arm-none-eabi-gcc-10.3.1-2.3/bin"
         BUILD = BUILD.with_name(BUILD.name + "-gcc10")
+    if options.network_trace:
+        BUILD = BUILD.with_name(BUILD.name + "-network-trace")
+    if options.sdk_logs:
+        BUILD = BUILD.with_name(BUILD.name + "-sdk-logs")
     BUILD.mkdir(parents=True, exist_ok=True)
     artifact = "tasmota" if options.application else "sdk-probe"
     # A failed build must not leave an earlier successful firmware/result visible.
@@ -116,7 +126,7 @@ def main():
             cpp_headers += ["-isystem", directory.as_posix()]
     definitions = [
         "PRODUCT_VERSION=7697", "MTK_BSPEXT_ENABLE", "USE_HAL_DRIVER",
-        "MTK_NVDM_ENABLE", "MTK_DEBUG_LEVEL_INFO", "MTK_DEBUG_LEVEL_WARNING",
+        "MTK_NVDM_ENABLE",
         "MTK_DEBUG_LEVEL_ERROR", "MTK_LWIP_ENABLE", "MTK_MINISUPP_ENABLE",
         "MTK_WIFI_API_TEST_CLI_ENABLE", "MTK_WIFI_REPEATER_ENABLE",
         "MTK_WIFI_WPS_ENABLE", 'MBEDTLS_CONFIG_FILE="config-mtk-websocket.h"',
@@ -124,6 +134,10 @@ def main():
         "_REENT_SMALL", "F_CPU=192000000L", "ARDUINO=10801",
         "ARDUINO_linkit_7697", "ARDUINO_ARCH_LINKIT_RTOS",
     ]
+    if options.network_trace:
+        definitions.append("MT7697_NETWORK_TRACE")
+    if options.sdk_logs:
+        definitions += ["MT7697_SDK_LOGS", "MTK_DEBUG_LEVEL_INFO", "MTK_DEBUG_LEVEL_WARNING"]
     flags = machine + [
         "-Os", "-g", "-ffunction-sections", "-fdata-sections",
         "-fno-builtin", "-fno-strict-aliasing", "-fno-common",
@@ -155,6 +169,8 @@ def main():
                     "symcipher/aes_small_enc.c", "symcipher/aes_small_ctrcbc.c")]
         sources = [p for p in sources if p.name != "variant_delay.c"]
         sources += sorted((HERE / "platform").glob("*.cpp"))
+        if not options.network_trace:
+            sources = [p for p in sources if p.name != "sdk_rx_trace.cpp"]
         sources += [HERE / "core_layout.cpp"]
         flags += ["-DTASMOTA_PLATFORM_MT7697N", "-I" + HERE.as_posix(),
                   "-I" + (HERE.parents[1] / "tasmota").as_posix()]
@@ -230,15 +246,11 @@ def main():
         link += ["-Wl,--undefined=mt7697_platform_link_check"]
     if options.platform:
         link += ["-Wl,--wrap=wifi_init"]
-        link += ["-Wl,--wrap=tcpip_input"]
-        link += ["-Wl,--wrap=tcp_input"]
+        if options.network_trace:
+            link += ["-Wl,--wrap=tcpip_input", "-Wl,--wrap=tcp_input"]
         link += ["-Wl,--undefined=mt7697_ota_link_check"]
     if options.application:
         link += ["-Wl,--undefined=mt7697_image_identity"]
-        # Temporary, read-only supplicant boundary diagnostics.
-        for name in ("wpa_supplicant_add_iface", "os_zalloc", "wpa_config_read",
-                     "wpa_config_alloc_new_conf", "os_strlcpy"):
-            link += ["-Wl,--wrap=" + name]
     command("arm-none-eabi-gcc", link)
     undefined = command("arm-none-eabi-nm", ["-u", elf.as_posix()])
     if undefined.strip():
@@ -246,8 +258,12 @@ def main():
     if options.application:
         subprocess.run([sys.executable, str(HERE / "tests/sdk_layout_test.py")],
                        check=True)
-        subprocess.run([sys.executable, str(HERE / "tests/supplicant_trace_test.py"),
+        subprocess.run([sys.executable, str(HERE / "tests/tcp_diagnostics_test.py"),
                         str(elf)], check=True)
+        subprocess.run([sys.executable, str(HERE / "tests/diagnostic_image_test.py"),
+                        str(elf), *(["--network-trace"] if options.network_trace else []),
+                        *(["--sdk-logs"] if options.sdk_logs else [])],
+                       check=True)
     binary = BUILD / (artifact + ".bin")
     command("arm-none-eabi-objcopy", ["-O", "binary", elf.as_posix(), binary.as_posix()])
     if options.platform:
@@ -279,6 +295,8 @@ def main():
         "language": "c++11" if options.compiler == "legacy" else "gnu++17",
         "hardware_validated": False,
         "application": options.application,
+        "network_trace": options.network_trace,
+        "sdk_logs": options.sdk_logs,
         "dependencies_probe": options.dependencies and not options.application,
         "platform_probe": options.platform and not options.application,
         "binary_bytes": binary.stat().st_size,

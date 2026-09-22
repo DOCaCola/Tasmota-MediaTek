@@ -56,12 +56,14 @@ if __name__ == "__main__":
                         "-I" + str(PORT), "-I" + str(HERE),
                         *map(str, sources), "-o", str(executable)], check=True)
         subprocess.run([str(executable)], check=True)
-    executable = output / "sdk-station.exe"
-    subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
-                    "-I" + str(HERE / "station_fakes"),
-                    str(HERE / "sdk_station_test.cpp"), str(PORT / "platform/sdk_network.cpp"),
-                    str(PORT / "platform/network.cpp"), "-o", str(executable)], check=True)
-    subprocess.run([str(executable)], check=True)
+    for trace in (False, True):
+        executable = output / ("sdk-station-trace.exe" if trace else "sdk-station.exe")
+        subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                        *(["-DMT7697_NETWORK_TRACE"] if trace else []),
+                        "-I" + str(HERE / "station_fakes"),
+                        str(HERE / "sdk_station_test.cpp"), str(PORT / "platform/sdk_network.cpp"),
+                        str(PORT / "platform/network.cpp"), "-o", str(executable)], check=True)
+        subprocess.run([str(executable)], check=True)
     executable = output / "wifi-country.exe"
     subprocess.run([options.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror",
                     "-I" + str(HERE / "country_fakes"),

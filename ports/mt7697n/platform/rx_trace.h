@@ -14,4 +14,5 @@ inline bool is_dhcp_reply(const uint8_t* h, size_t n) {
   return udp[0] == 0 && udp[1] == 67 && udp[2] == 0 && udp[3] == 68;
 }
 void report_network_rx();
+void network_trace_printf(const char* format, ...) __attribute__((format(printf,1,2)));
 }

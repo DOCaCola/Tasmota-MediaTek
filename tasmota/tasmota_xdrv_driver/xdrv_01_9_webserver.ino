@@ -4456,7 +4456,8 @@ void (* const WebCommand[])(void) PROGMEM = {
 void CmndTcpStatus(void) {
   mt7697::TcpDiagnostics s;
   const bool ok=mt7697::tcp_diagnostics(s);
-  Response_P(PSTR("{\"TcpStatus\":{\"Valid\":%s,\"Ingress\":%u,\"InputErrors\":%u,"
+#ifdef MT7697_NETWORK_TRACE
+  Response_P(PSTR("{\"TcpStatus\":{\"Valid\":%s,\"Trace\":true,\"Ingress\":%u,\"InputErrors\":%u,"
     "\"Processed\":%u,\"BadChecksum\":%u,\"Advanced\":%u,\"Active\":%u,\"TimeWait\":%u,"
     "\"Queued\":%u,\"Retransmitted\":%u,\"PowerSave\":%d,\"Last\":[%u,%u,%u,%u,%u,%u],"
     "\"Stalled\":[%u,%u,%u,%u],\"Rejected\":[%u,%u,%u,%u,%u,%u,%u],"
@@ -4467,6 +4468,14 @@ void CmndTcpStatus(void) {
     s.stalled_port,s.stalled_ack,s.stalled_next,s.stalled_queue,
     s.rejected,s.rejected_port,s.rejected_seq,s.rejected_rxnext,
     s.rejected_ack,s.rejected_before,s.rejected_next,s.pool_used,s.pool_peak,s.pool_errors);
+#else
+  Response_P(PSTR("{\"TcpStatus\":{\"Valid\":%s,\"Trace\":false,\"Active\":%u,\"TimeWait\":%u,"
+    "\"Queued\":%u,\"Retransmitted\":%u,\"PowerSave\":%d,\"Stalled\":[%u,%u,%u,%u],"
+    "\"PoolUsed\":%u,\"PoolPeak\":%u,\"PoolErrors\":%u}}"),
+    ok?"true":"false",s.active,s.timewait,s.queued,s.retransmitted,s.power_save,
+    s.stalled_port,s.stalled_ack,s.stalled_next,s.stalled_queue,
+    s.pool_used,s.pool_peak,s.pool_errors);
+#endif
 }
 void CmndWebStatus(void) {
   const auto& s=NativeWebStatistics();

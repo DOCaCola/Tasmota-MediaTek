@@ -1,7 +1,8 @@
 from elftools.elf.elffile import ELFFile
 from elftools.dwarf.dwarf_expr import DWARFExprParser
 from pathlib import Path
-p=Path(__file__).resolve().parents[1]/'build/tasmota-gcc13-sdk-runtime/tasmota.elf'
+import sys
+p=Path(sys.argv[1]) if len(sys.argv)>1 else Path(__file__).resolve().parents[1]/'build/tasmota-gcc13-sdk-runtime/tasmota.elf'
 with p.open('rb') as f:
  d=ELFFile(f).get_dwarf_info();layouts={}
  for cu in d.iter_CUs():

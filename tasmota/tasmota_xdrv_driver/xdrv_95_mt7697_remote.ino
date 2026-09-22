@@ -7,6 +7,7 @@ bool NativeRemoteStarted=false;
 unsigned NativeRemoteLastState=255;
 int NativeRemoteCtDirection=1;
 uint32_t NativeRemoteUnsupported=0;
+uint32_t NativeRemoteLastFailures=0, NativeRemoteLastPaired=0;
 
 void CmndRemoteStatus(void) {
   const auto s=mt7697::remote::status(millis());
@@ -101,10 +102,21 @@ bool Xdrv95(uint32_t function) {
         // One light action per pass, preserving fairness for HTTP/Wi-Fi/OTA.
         if (mt7697::remote::action(code)) NativeRemoteAction(code);
         const auto s=mt7697::remote::status(millis());
+        if (s.failures!=NativeRemoteLastFailures || s.paired!=NativeRemoteLastPaired) {
+          AddLog(s.failures!=NativeRemoteLastFailures?LOG_LEVEL_ERROR:LOG_LEVEL_INFO,
+                 PSTR("BLE: Remote pairings %u, failures %u, error %u"),
+                 s.paired,s.failures,s.last_error);
+          NativeRemoteLastFailures=s.failures;NativeRemoteLastPaired=s.paired;
+        }
         if (s.state!=NativeRemoteLastState) {
           NativeRemoteLastState=s.state;
-          AddLog(LOG_LEVEL_INFO,PSTR("BLE: Remote state %u, devices %u, error %u"),
+          if (s.state==13) {
+            AddLog(LOG_LEVEL_ERROR,PSTR("BLE: Remote receiver fault %u"),s.last_error);
+          }
+#ifdef MT7697_NETWORK_TRACE
+          AddLog(LOG_LEVEL_DEBUG,PSTR("BLE: Remote state %u, devices %u, error %u"),
                  s.state,s.devices,s.last_error);
+#endif
         }
       }
       break;

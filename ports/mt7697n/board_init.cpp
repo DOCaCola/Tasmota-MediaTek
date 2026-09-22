@@ -7,19 +7,43 @@
 extern "C" {
 #include <top.h>
 #include <hal_flash.h>
-#include <spi_flash.h>
 #include <hal_uart.h>
 #include <hal_pwm.h>
 #include <syslog.h>
 #include <exception_handler.h>
 LOG_CONTROL_BLOCK_DECLARE(wifi);
 LOG_CONTROL_BLOCK_DECLARE(common);
-extern const struct chip_info* spi_chip_info;
+LOG_CONTROL_BLOCK_DECLARE(connsys);
+LOG_CONTROL_BLOCK_DECLARE(lwip);
+LOG_CONTROL_BLOCK_DECLARE(inband);
+LOG_CONTROL_BLOCK_DECLARE(minisupp);
+LOG_CONTROL_BLOCK_DECLARE(dhcpd);
+LOG_CONTROL_BLOCK_DECLARE(fota_module_api);
+LOG_CONTROL_BLOCK_DECLARE(BT);
+LOG_CONTROL_BLOCK_DECLARE(BTMM);
+LOG_CONTROL_BLOCK_DECLARE(BTHCI);
+LOG_CONTROL_BLOCK_DECLARE(BTL2CAP);
+LOG_CONTROL_BLOCK_DECLARE(BTRFCOMM);
+LOG_CONTROL_BLOCK_DECLARE(BTSPP);
+LOG_CONTROL_BLOCK_DECLARE(BTIF);
 }
 
 static log_control_block_t* native_log_modules[] = {
   &LOG_CONTROL_BLOCK_SYMBOL(wifi),
   &LOG_CONTROL_BLOCK_SYMBOL(common),
+  &LOG_CONTROL_BLOCK_SYMBOL(connsys),
+  &LOG_CONTROL_BLOCK_SYMBOL(lwip),
+  &LOG_CONTROL_BLOCK_SYMBOL(inband),
+  &LOG_CONTROL_BLOCK_SYMBOL(minisupp),
+  &LOG_CONTROL_BLOCK_SYMBOL(dhcpd),
+  &LOG_CONTROL_BLOCK_SYMBOL(fota_module_api),
+  &LOG_CONTROL_BLOCK_SYMBOL(BT),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTMM),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTHCI),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTL2CAP),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTRFCOMM),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTSPP),
+  &LOG_CONTROL_BLOCK_SYMBOL(BTIF),
   nullptr
 };
 
@@ -27,7 +51,7 @@ static bool boot_uart_owned = false;
 extern "C" bool native_uart_takeover(hal_uart_port_t port) {
   if (port != HAL_UART_0 || !boot_uart_owned) return true;
   // Serial takes over the early polling console and installs its RX DMA.
-  // SDK log_putchar keeps using polling TX on the same physical UART.
+  // Optional SDK stdout uses polling TX on the same physical UART.
   if (hal_uart_deinit(port) != HAL_UART_STATUS_OK) return false;
   boot_uart_owned = false;
   return true;
@@ -41,27 +65,6 @@ static void fault_hex(unsigned value) {
     hal_uart_put_char(HAL_UART_0, digit < 10 ? '0' + digit : 'a' + digit - 10);
   }
   hal_uart_put_char(HAL_UART_0, ' ');
-}
-
-// Read-only bring-up evidence, collected before Wi-Fi/tasks use the SFC.
-// Report the physical JEDEC response separately from the SDK's selected table.
-static void flash_report(hal_flash_status_t initialized) {
-  const char* label = "\r\nFLASH init, JEDEC read result, JEDEC bytes, SDK id/jedec/capacity:\r\n";
-  while (*label) hal_uart_put_char(HAL_UART_0, *label++);
-  fault_hex(static_cast<unsigned>(initialized));
-  if (initialized == HAL_FLASH_STATUS_OK) {
-    unsigned char id[3] = {};
-    const int count = flash_read_jedec_id(id, sizeof(id));
-    fault_hex(static_cast<unsigned>(count));
-    for (unsigned char byte : id) fault_hex(byte);
-    if (spi_chip_info) {
-      fault_hex(spi_chip_info->id);
-      fault_hex(spi_chip_info->jedec_id);
-      fault_hex(spi_chip_info->page_size * spi_chip_info->n_pages);
-    }
-  }
-  hal_uart_put_char(HAL_UART_0, '\r');
-  hal_uart_put_char(HAL_UART_0, '\n');
 }
 
 static void fault_report() {
@@ -94,19 +97,28 @@ extern "C" void init_system() {
   top_xtal_init();
   cmnCpuClkConfigureTo192M();
   cmnSerialFlashClkConfTo64M();
-  const auto flash_initialized = hal_flash_init();
+  hal_flash_init();
   exception_config_type fault_callbacks = {fault_report, nullptr};
   exception_register_callbacks(&fault_callbacks);
-  // Keep the BSP's diagnostic service: radio initialization and exception
-  // handlers otherwise lose the messages needed to diagnose hardware faults.
+  // Retain SDK service/UART initialization. Filter vendor output separately
+  // from Tasmota's SerialLog/WebLog and the direct exception reporter.
   boot_uart_owned = log_uart_init(HAL_UART_0) == HAL_UART_STATUS_OK;
   log_init(nullptr, nullptr, native_log_modules);
-  flash_report(flash_initialized);
+#ifndef MT7697_SDK_LOGS
+  // Use the SDK API: its private short-enum layout differs from our headers.
+  // Only the first (module-name pointer) field is accessed here.
+  for (auto** module=native_log_modules; *module; ++module) {
+    syslog_at_set_filter(const_cast<char*>((*module)->module_name),
+                        DEBUG_LOG_OFF, PRINT_LEVEL_ERROR, 0);
+  }
+#endif
   // GPIO ownership is deferred to the selected application/probe.
 }
 
 extern "C" int __io_putchar(int ch) {
+#ifdef MT7697_SDK_LOGS
   hal_uart_put_char(HAL_UART_0, ch);
+#endif
   return ch;
 }
 

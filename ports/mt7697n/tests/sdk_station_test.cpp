@@ -18,6 +18,7 @@ namespace mt7697 { bool apply_setup_ap() {
   assert(radio_mode==WIFI_MODE_REPEATER);return operation('P')>=0;
 }
 void report_network_rx() {}
+void network_trace_printf(const char*, ...) {}
 }
 extern "C" {
 const ip_addr_t zero_ip{};

@@ -887,25 +887,11 @@ void loop(void) {
   uint32_t my_sleep = millis();
 
 #ifdef TASMOTA_PLATFORM_MT7697N
-  static bool trace_first_loop = true;
-  static uint32_t trace_last_alive = 0;
-  if (millis() - trace_last_alive >= 5000) {
-    trace_last_alive = millis();
-    AddLog(LOG_LEVEL_INFO, PSTR("DBG: Main alive, heap %u, stack %u"),
-           mt7697::free_heap(), mt7697::stack_low_water_bytes());
-  }
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: Loop entered"));
   NativeRtcPoll();
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: RTC polled"));
   WifiPollNtp();
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: NTP polled"));
   NativeOtaPoll();
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: OTA polled"));
 #endif
   Scheduler();
-#ifdef TASMOTA_PLATFORM_MT7697N
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: Scheduler returned"));
-#endif
 
   uint32_t my_activity = millis() - my_sleep;
 
@@ -931,8 +917,4 @@ void loop(void) {
   uint32_t loops_per_second = 1000 / loop_delay;   // We need to keep track of this many loops per second
   uint32_t this_cycle_ratio = 100 * my_activity / loop_delay;
   TasmotaGlobal.loop_load_avg = TasmotaGlobal.loop_load_avg - (TasmotaGlobal.loop_load_avg / loops_per_second) + (this_cycle_ratio / loops_per_second); // Take away one loop average away and add the new one
-#ifdef TASMOTA_PLATFORM_MT7697N
-  if (trace_first_loop) AddLog(LOG_LEVEL_INFO, PSTR("DBG: First loop complete"));
-  trace_first_loop = false;
-#endif
 }
