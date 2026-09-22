@@ -94,6 +94,14 @@ Tests cover early notifications, owned callback data, discovery, authentication,
 key persistence and write failure, bad packets/tags, disconnect/cancellation
 races, timeouts, duplicates, nonconnectable advertisements and light mappings.
 
-Radio behavior, remote interoperability and coexistence with Wi-Fi/HTTP/OTA
-still require hardware validation. See workspace `RnD/native-remote-implementation.md`
-for the deployment record.
+On the YLXD01YL, an unmarked PID `0x0153` handheld paired successfully and its
+owner confirmed light control. Hardware counters verified decryption, duplicate
+suppression and 35 actions. The saved remote loaded after a software restart,
+and decrypted another 132 packets / executed 26 actions without re-pairing,
+with BLE scanning and Wi-Fi/HTTP operational again. Cold power-cycle persistence,
+every long-press mapping and other remote models remain unverified. An initial
+concurrent HTTP test had one connection closed without a response in 90 requests;
+this is recorded separately from the successful BLE test.
+A repeat three-client HTTP check passed all 180 requests; the earlier closure
+remains unreproduced.
+See workspace `RnD/native-remote-implementation.md` for the deployment record.
