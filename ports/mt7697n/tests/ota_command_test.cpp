@@ -20,7 +20,7 @@ struct {
   unsigned restart_flag = 0;
 } TasmotaGlobal;
 struct { unsigned data_len = 1, payload = 1; } XdrvMailbox;
-const char* SettingsText(unsigned) { return "http://10.9.8.2/update.bin"; }
+const char* SettingsText(unsigned) { return "http://192.0.2.2/update.bin"; }
 static char output[256];
 static unsigned published;
 void ResponseCmndChar(const char* text) { snprintf(output,sizeof(output),"%s",text); }

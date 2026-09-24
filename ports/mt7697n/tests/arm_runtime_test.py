@@ -35,7 +35,7 @@ SECTIONS {
 .data : { *(.data*) } > RAM
 .bss (NOLOAD) : { *(.bss*) *(COMMON) } > RAM
 }
-""")
+""", encoding="utf-8")
 objects = [next(BUILD.glob("*-" + name + ".o")) for name in
            ("ext_printf.cpp", "dtostrf.c", "wall_clock.cpp")]
 runtime = OLD / "lib/armv7e-m/fpu"

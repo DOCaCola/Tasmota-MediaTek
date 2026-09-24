@@ -63,7 +63,7 @@ def without_defaults(signature):
 
 
 def add_prototypes(preprocessed, ctags):
-    lines = preprocessed.read_text().splitlines(keepends=True)
+    lines = preprocessed.read_text(encoding="utf-8").splitlines(keepends=True)
     origins = []
     source_lines = []
     origin = ""
@@ -79,7 +79,7 @@ def add_prototypes(preprocessed, ctags):
     tag_source = preprocessed.with_name("sketch-functions.cpp")
     tag_source.write_text("".join(
         line if origin.endswith(".ino") and not line.startswith("#") else "\n"
-        for line, origin in zip(lines, origins)))
+        for line, origin in zip(lines, origins)), encoding="utf-8")
     tags = subprocess.check_output([
         str(ctags), "-u", "--language-force=c++", "-f", "-",
         "--c++-kinds=f", "--fields=KSTtzns", str(tag_source)], text=True)
@@ -115,4 +115,4 @@ def add_prototypes(preprocessed, ctags):
     start = next(i for i, line in enumerate(lines) if line.startswith("void setup(void)"))
     lines[start:start] = ['# 1 "generated-sketch-prototypes"\n', *prototypes,
                          f'# {source_lines[start]} "{origins[start]}"\n']
-    preprocessed.write_text("".join(lines))
+    preprocessed.write_text("".join(lines), encoding="utf-8")

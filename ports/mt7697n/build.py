@@ -45,8 +45,7 @@ def main():
     parser.add_argument("--sdk-logs", action="store_true",
                         help="Enable vendor SDK logs and raw SDK UART stdout")
     parser.add_argument("--ctags", type=Path,
-                        default=Path(os.environ.get("LOCALAPPDATA", ".")) /
-                        "Arduino15/packages/builtin/tools/ctags/5.8-arduino11/ctags.exe",
+                        default=WORK / "vendor/ctags/ctags-5.8-arduino11/ctags.exe",
                         help="Arduino ctags executable for application declarations")
     parser.add_argument("--layout", choices=["sdk", "lamp"], default="sdk")
     parser.add_argument("--compiler", choices=["legacy", "gcc10", "gcc13", "gcc13-sdk-runtime"],
@@ -91,9 +90,9 @@ def main():
     # A failed build must not leave an earlier successful firmware/result visible.
     for name in (artifact + ".elf", artifact + ".bin", "result.json"):
         (BUILD / name).unlink(missing_ok=True)
-    (BUILD / "build.log").write_text("")
+    (BUILD / "build.log").write_text("", encoding="utf-8")
     properties = {}
-    for line in (SDK / "boards.txt").read_text().splitlines():
+    for line in (SDK / "boards.txt").read_text(encoding="utf-8").splitlines():
         if line.startswith("linkit_7697.") and "=" in line:
             key, value = line.split("=", 1)
             properties[key.removeprefix("linkit_7697.")] = value
@@ -191,7 +190,7 @@ def main():
         units = [sketch / "tasmota.ino"] + sorted(sketch.glob("tasmota_*/*.ino"))
         application = BUILD / "tasmota.cpp"
         application.write_text('#include <Arduino.h>\n' +
-                               "\n".join('#include "' + p.as_posix() + '"' for p in units))
+                               "\n".join('#include "' + p.as_posix() + '"' for p in units), encoding="utf-8")
         sources.append(application)
         preprocessed = BUILD / "tasmota.ii"
         command("arm-none-eabi-g++", flags + ["-std=gnu++17", "-fno-exceptions", "-fno-rtti"] + cpp_headers + c_headers
@@ -322,7 +321,7 @@ def main():
             str(Path(path).relative_to(WORK)): hashlib.sha256(Path(path).read_bytes()).hexdigest()
             for path in runtime_libraries
         }
-    (BUILD / "result.json").write_text(json.dumps(metadata, indent=2))
+    (BUILD / "result.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
     print(json.dumps(metadata, indent=2))
 
 

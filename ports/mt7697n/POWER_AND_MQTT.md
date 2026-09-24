@@ -39,27 +39,27 @@ Configure MqttHost, MqttPort, MqttUser/MqttPassword if required, and SetOption3 
 This build does not include MQTT TLS, rules, or Home Assistant discovery.
 Manual MQTT light configuration can use the normal topics.
 
-With default FullTopic and Topic `tasmota_ABAE7D`:
+With default FullTopic and Topic `ylxd01yl`:
 
 | Publish topic | Payload | Effect |
 | --- | --- | --- |
-| `cmnd/tasmota_ABAE7D/Power` | `ON`, `OFF`, `TOGGLE` | Selected group power |
-| `cmnd/tasmota_ABAE7D/Dimmer` | `0..100` | Active group's brightness |
-| `cmnd/tasmota_ABAE7D/CT` | `153..370` | Daylight CCT in mired |
-| `cmnd/tasmota_ABAE7D/LampNight` | `0` or `1` | Select daylight/night, retain power |
-| `cmnd/tasmota_ABAE7D/State` | empty | Read current light/network state |
-| `cmnd/tasmota_ABAE7D/LampStatus` | empty | Group dimmers and PWM diagnostics |
-| `cmnd/tasmota_ABAE7D/Backlog` | `LampNight 1; Dimmer 7; Power ON` | Ordered commands |
+| `cmnd/ylxd01yl/Power` | `ON`, `OFF`, `TOGGLE` | Selected group power |
+| `cmnd/ylxd01yl/Dimmer` | `0..100` | Active group's brightness |
+| `cmnd/ylxd01yl/CT` | `153..370` | Daylight CCT in mired |
+| `cmnd/ylxd01yl/LampNight` | `0` or `1` | Select daylight/night, retain power |
+| `cmnd/ylxd01yl/State` | empty | Read current light/network state |
+| `cmnd/ylxd01yl/LampStatus` | empty | Group dimmers and PWM diagnostics |
+| `cmnd/ylxd01yl/Backlog` | `LampNight 1; Dimmer 7; Power ON` | Ordered commands |
 
 Night CT has no effect on the dedicated night LED. LampNight restores the
 chosen group's independent dimmer. Standard SetOption20 controls whether
 Dimmer/CT commands turn on an off light; LampNight selection itself does not.
 
-Command replies normally use `stat/tasmota_ABAE7D/RESULT`; power also has its
-standard POWER response. `tele/tasmota_ABAE7D/STATE` carries Power, Dimmer, CT
+Command replies normally use `stat/ylxd01yl/RESULT`; power also has its
+standard POWER response. `tele/ylxd01yl/STATE` carries Power, Dimmer, CT
 and LampNight. SetOption59 1 publishes STATE on light/power changes, including
 LampNight changes. Periodic telemetry follows TelePeriod; availability uses
-`tele/tasmota_ABAE7D/LWT`.
+`tele/ylxd01yl/LWT`.
 
 Use non-retained command messages for normal control. Retained commands replay
 on reconnect and can immediately override the local boot decision.

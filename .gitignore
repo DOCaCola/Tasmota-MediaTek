@@ -65,3 +65,12 @@ venv
 
 ## Qemu test folder
 tasmota-qemu
+
+# Local MediaTek investigation material (SDK/downloads normally live outside checkout)
+/RnD/
+/private/
+/vendor/
+/downloads/
+*.pcap
+*.pcapng
+*.su

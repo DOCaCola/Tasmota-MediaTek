@@ -1,0 +1,29 @@
+name: MediaTek host tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mediatek-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Fetch pinned SDK headers
+        run: python ports/mt7697n/bootstrap.py --sdk-only
+      - name: Run native host tests
+        run: python ports/mt7697n/tests/run.py --cxx g++

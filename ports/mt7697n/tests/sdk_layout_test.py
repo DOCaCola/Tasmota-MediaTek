@@ -11,7 +11,7 @@ from bootloader import TARGET, SIZE, SHA256
 
 data = TARGET.read_bytes()
 assert len(data) == SIZE and hashlib.sha256(data).hexdigest() == SHA256
-header = (port / "platform/sdk_layout.h").read_text()
+header = (port / "platform/sdk_layout.h").read_text(encoding="utf-8")
 assert int(re.search(r"kBootloaderBytes\s*=\s*(\d+)", header)[1]) == len(data)
 digest = bytes(int(v, 16) for v in re.findall(r"0x([0-9a-f]{2})", header))
 assert digest == hashlib.sha1(data).digest()

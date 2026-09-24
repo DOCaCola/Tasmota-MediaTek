@@ -17,7 +17,7 @@ if __name__ == "__main__":
     output = PORT / "build/host-tests"
     output.mkdir(parents=True, exist_ok=True)
     core = PORT.parents[1] / "tasmota"
-    settings_source = (core / "tasmota_support/settings.ino").read_text()
+    settings_source = (core / "tasmota_support/settings.ino").read_text(encoding="utf-8")
     functions = []
     for name in ("GetCfgCrc16", "GetSettingsCrc", "GetCfgCrc32", "GetSettingsCrc32",
                  "SettingsSave", "SettingsLoad"):
@@ -26,26 +26,26 @@ if __name__ == "__main__":
         if not match:
             raise RuntimeError("Core function not found: " + name)
         functions.append(match.group())
-    (output / "core_settings_functions.inc").write_text("\n\n".join(functions))
-    power_source = (core / "tasmota_support/support_tasmota.ino").read_text()
+    (output / "core_settings_functions.inc").write_text("\n\n".join(functions), encoding="utf-8")
+    power_source = (core / "tasmota_support/support_tasmota.ino").read_text(encoding="utf-8")
     power_function = re.search(r"^void SetPowerOnState\(void\)\s*\{.*?^\}",
                                power_source, re.M | re.S)
     if not power_function:
         raise RuntimeError("Core power-on function not found")
-    (output / "power_on_function.inc").write_text(power_function.group())
-    manager_source = (core / "tasmota_xdrv_driver/xdrv_01_z_manager_mt7697.ino").read_text()
+    (output / "power_on_function.inc").write_text(power_function.group(), encoding="utf-8")
+    manager_source = (core / "tasmota_xdrv_driver/xdrv_01_z_manager_mt7697.ino").read_text(encoding="utf-8")
     trial_functions = []
     for name in ("NativeWifiTestBegin", "NativeWifiTestHasIP", "NativeWifiTestCommit", "NativeWifiTestDiscard"):
         match = re.search(r"^(?:void|bool) " + name + r"\([^;\n]*\) \{.*?^\}", manager_source, re.M | re.S)
         if not match:
             raise RuntimeError("Trial function not found: " + name)
         trial_functions.append(match.group())
-    (output / "wifi_trial_functions.inc").write_text("\n\n".join(trial_functions))
-    web_source = (core / "tasmota_xdrv_driver/xdrv_01_9_webserver.ino").read_text()
+    (output / "wifi_trial_functions.inc").write_text("\n\n".join(trial_functions), encoding="utf-8")
+    web_source = (core / "tasmota_xdrv_driver/xdrv_01_9_webserver.ino").read_text(encoding="utf-8")
     captive = re.search(r"^bool CaptivePortal\(void\) \{.*?^\}", web_source, re.M | re.S)
     if not captive:
         raise RuntimeError("CaptivePortal function not found")
-    (output / "captive_portal_function.inc").write_text(captive.group())
+    (output / "captive_portal_function.inc").write_text(captive.group(), encoding="utf-8")
     if options.generate_only:
         sys.exit(0)
     subprocess.run([sys.executable, str(HERE / "sketch_test.py")], check=True)

@@ -107,4 +107,4 @@ concurrent HTTP test had one connection closed without a response in 90 requests
 this is recorded separately from the successful BLE test.
 A repeat three-client HTTP check passed all 180 requests; the earlier closure
 remains unreproduced.
-See workspace `RnD/native-remote-implementation.md` for the deployment record.
+Private device captures and pairing credentials are not included in this repository.

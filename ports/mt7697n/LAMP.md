@@ -42,11 +42,10 @@ off. Hardware readback does not measure emitted light.
 
 Schema/mode/day-dimmer/night-dimmer occupy settings offsets 0x404–0x407;
 settings length and subsequent fields are unchanged. First lighting-capable boot
-starts off with PowerOnState 0. Native unknown-reset classification still takes
-the saved-state restart path: subsequent cold-boot PowerOnState policy remains
-unverified. SetOption37/68/92 cannot remap this board's fixed channel topology.
+starts off with PowerOnState 0. The reserved-SRAM restart classifier and remaining cold-boot validation gap
+are described in [POWER_AND_MQTT.md](POWER_AND_MQTT.md). SetOption37/68/92 cannot remap this board's fixed channel topology.
 
 Validation: tests/run.py covers driver dispatch, migration, separate dimmers,
 HAL failure, fade replacement, timer wrap and bounds; arm_runtime_test.py runs
-stock-derived targets/fades on Cortex-M4 with the SDK runtime. Research and
-reproduction tools are in the workspace RnD folder.
+stock-derived targets/fades on Cortex-M4 with the SDK runtime. The stock-derived test vectors are included; private firmware dumps and
+research captures are not required for these checks.

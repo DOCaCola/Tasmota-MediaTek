@@ -29,12 +29,12 @@ class SketchTests(unittest.TestCase):
             source.write_text('''# 1 "test.ino"
 void setup(void) {}
 static bool helper(int n) { return n; }
-''')
+''', encoding="utf-8")
             tags = '''helper	test.ii	/^static/;"	line:3	returntype:bool	signature:(int n)
 '''
             with patch("sketch.subprocess.check_output", return_value=tags):
                 add_prototypes(source, "ctags")
-            self.assertIn("static bool helper(int n);", source.read_text())
+            self.assertIn("static bool helper(int n);", source.read_text(encoding="utf-8"))
 
     def test_unterminated(self):
         with self.assertRaises(ValueError):
