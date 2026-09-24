@@ -13,7 +13,7 @@
 #define PSTR(x) x
 using std::max;
 template<class T> T constrain(T x,T lo,T hi) { return std::max(lo,std::min(x,hi)); }
-static size_t strlcpy(char* p,const char* s,size_t n) { snprintf(p,n,"%s",s); return strlen(s); }
+static size_t TestStrlcpy(char* p,const char* s,size_t n) { snprintf(p,n,"%s",s); return strlen(s); }
 enum {SRC_BUTTON,LOG_LEVEL_INFO,LOG_LEVEL_ERROR,LOG_LEVEL_DEBUG,FUNC_LOOP,FUNC_COMMAND};
 struct { bool lamp_night=false; } settings;
 auto* Settings=&settings;
@@ -43,7 +43,10 @@ Status status(uint32_t) { return {}; }
 bool device(unsigned,uint16_t&,uint8_t[6]) { return false; }
 bool action(uint32_t&) { return false; }
 } }
+// Bind the driver to the test helper without redeclaring a host libc symbol.
+#define strlcpy TestStrlcpy
 #include "../../../tasmota/tasmota_xdrv_driver/xdrv_95_mt7697_remote.ino"
+#undef strlcpy
 
 int main() {
   const std::pair<uint32_t,const char*> cases[]={{0,"Power ON"},{1,"Power OFF"},
